@@ -1,0 +1,116 @@
+
+################################################################
+### AEON 27B MTP on AEON 0.24  (U=0.70 N=2 — safe sizing, BF16 KV, DFlash k=10)
+################################################################
+  stopping: unsloth27b-v025
+  MemAvailable: 118 GiB
+MemAvailable before boot: 118 GiB
+ce7ba0b937d71130976b2badb55b5a93d9746a8526c408405a90f721d336c68b
+aeon27b-ab starting (util=0.70 seqs=2); waiting for health
+LLM ready
+OK — engine answered a real request
+--- kernels ---
+ 07-16 06:51:33 [cuda.py:539] Using backend AttentionBackendEnum.FLASH_ATTN for vit attention
+ 07-16 06:51:33 [mm_encoder_attention.py:373] Using AttentionBackendEnum.FLASH_ATTN for MMEncoderAttention.
+ 07-16 06:51:33 [qwen_gdn_linear_attn.py:228] Using Triton/FLA GDN prefill kernel (requested=auto, head_k_dim=128).
+ 07-16 06:51:33 [__init__.py:937] Using FlashInferCutlassNvFp4LinearKernel for NVFP4 GEMM
+--- KV pool ---
+ 07-16 06:57:41 [kv_cache_utils.py:2147] Maximum concurrency for 262,144 tokens per request: 1.47x
+--- PREFILL pp8192 ---
+conc | wall_s | prefill tok/s | decode tok/s | TTFT mean | TTFT p95 | ok
+   1 |    4.7 |          1745 |          0.2 |      4.69 |     4.69 | 1/1
+   1 |    4.6 |          1768 |          0.2 |      4.63 |     4.63 | 1/1
+--- PREFILL pp32768 ---
+conc | wall_s | prefill tok/s | decode tok/s | TTFT mean | TTFT p95 | ok
+   1 |   24.5 |          1335 |          0.0 |     24.54 |    24.54 | 1/1
+   1 |   25.0 |          1309 |          0.0 |     25.02 |    25.02 | 1/1
+--- DECODE (token generation) c1,c2 ---
+conc | wall_s | prefill tok/s | decode tok/s | TTFT mean | TTFT p95 | ok
+   1 |   11.1 |             3 |         23.1 |      0.33 |     0.33 | 1/1
+   1 |   10.1 |             4 |         25.3 |      0.33 |     0.33 | 1/1
+   1 |    9.7 |             4 |         26.5 |      0.32 |     0.32 | 1/1
+   2 |   13.0 |             6 |         39.3 |      1.34 |     1.34 | 2/2
+   2 |   11.2 |             7 |         45.8 |      0.30 |     0.30 | 2/2
+   2 |   10.8 |             7 |         47.6 |      0.86 |     0.85 | 2/2
+DFlash acceptance = 27.8%
+
+################################################################
+### AEON 27B MTP on AEON 0.25.0  (U=0.70 N=2 — safe sizing, BF16 KV, DFlash k=10)
+################################################################
+  stopping: aeon27b-ab
+  MemAvailable: 118 GiB
+MemAvailable before boot: 118 GiB
+94990ee79367b2f41ab6515a044ab215d9f355dc101ac8356896829e506f103d
+aeon27b-ab starting (util=0.70 seqs=2); waiting for health
+LLM ready
+OK — engine answered a real request
+--- kernels ---
+ 07-16 07:05:40 [cuda.py:535] Using backend AttentionBackendEnum.FLASH_ATTN for vit attention
+ 07-16 07:05:40 [mm_encoder_attention.py:373] Using AttentionBackendEnum.FLASH_ATTN for MMEncoderAttention.
+ 07-16 07:05:40 [qwen_gdn_linear_attn.py:228] Using Triton/FLA GDN prefill kernel (requested=auto, head_k_dim=128).
+ 07-16 07:05:40 [__init__.py:974] Using FlashInferCutlassNvFp4LinearKernel for NVFP4 GEMM
+--- KV pool ---
+ 07-16 07:13:54 [kv_cache_utils.py:2158] Maximum concurrency for 262,144 tokens per request: 1.47x
+--- PREFILL pp8192 ---
+conc | wall_s | prefill tok/s | decode tok/s | TTFT mean | TTFT p95 | ok
+   1 |    4.3 |          1884 |          0.2 |      4.34 |     4.34 | 1/1
+   1 |    4.3 |          1885 |          0.2 |      4.34 |     4.34 | 1/1
+--- PREFILL pp32768 ---
+conc | wall_s | prefill tok/s | decode tok/s | TTFT mean | TTFT p95 | ok
+   1 |   22.0 |          1485 |          0.0 |     22.05 |    22.05 | 1/1
+   1 |   23.0 |          1427 |          0.0 |     22.95 |    22.95 | 1/1
+--- DECODE (token generation) c1,c2 ---
+conc | wall_s | prefill tok/s | decode tok/s | TTFT mean | TTFT p95 | ok
+   1 |    8.5 |             4 |         30.2 |      0.33 |     0.33 | 1/1
+   1 |    8.6 |             4 |         29.7 |      0.22 |     0.22 | 1/1
+   1 |    8.2 |             5 |         31.3 |      0.19 |     0.19 | 1/1
+   2 |   11.7 |             6 |         43.8 |      1.39 |     1.39 | 2/2
+   2 |   10.7 |             7 |         47.9 |      0.32 |     0.32 | 2/2
+   2 |   10.8 |             7 |         47.6 |      0.30 |     0.30 | 2/2
+DFlash acceptance = 31.3%
+
+################################################################
+### MIGRATE composes 0.24 -> 0.25.0  (only if 0.25 passed: OK25=1)
+################################################################
+  migrated: Ornith-1.0-35B-AEON-Ultimate-Uncensored/docker-compose.spark-voice.runtime.yml
+  migrated: Qwen3.6-35B-A3B-heretic-NVFP4-DFlash/docker-compose.spark-voice.runtime.yml
+  migrated: spark-deploy/docker-compose.ornith-voice.yml
+  migrated: spark-deploy/docker-compose.qwen35b-voice.yml
+  migrated: spark-deploy/docker-compose.27b-mtp-coding.yml
+  migrated: spark-deploy/docker-compose.27b-mtp-voice.yml
+  migrated: spark-deploy/docker-compose.27b-voice.yml
+  migrated: spark-deploy/boot-ornith-v024.sh
+--- verify no 0.24 refs remain in active configs ---
+  clean — all point at 2026-07-14-v0.25.0
+--- YAML still valid ---
+  OK Ornith-1.0-35B-AEON-Ultimate-Uncensored/docker-compose.spark-voice.runtime.yml
+  OK spark-deploy/docker-compose.ornith-voice.yml
+  OK spark-deploy/docker-compose.27b-mtp-coding.yml
+
+################################################################
+### DELETE AEON 0.24 image (45.2 GB)
+################################################################
+  stopping: aeon27b-ab
+Deleted: sha256:c646dc598754e5bd9a9fe5155ad3e95791334d8a90d96825fe00f7513b2f7aad
+Deleted: sha256:7cdb4b193b526f9b7fec9871f910adfd140fe8c7313ef6bec60c9c6522a08149
+--- images now ---
+eugr/spark-vllm:nightly-20260715 19.2GB
+ghcr.io/aeon-7/aeon-vllm-ultimate:2026-07-14-v0.25.0 43GB
+eugr/spark-vllm:latest 19.2GB
+--- disk ---
+/dev/nvme0n1p2  916G  831G   38G  96% /
+
+################################################################
+### RESTORE — 27B coder (U=0.74 N=4 DFlash k=10)
+################################################################
+MemAvailable before boot: 118 GiB
+5a8139b4e3b9f78472450c7dd51a09607ed882da99f47a985930b72fb26c606b
+unsloth27b-v025 starting (image=eugr/spark-vllm:latest util=0.74 seqs=4 kv=fp8 spec={"method":"dflash","model":"/models/dflash-drafter","num_speculative_tokens":10}); waiting for health
+LLM ready
+{"id":"chatcmpl-ad2332507cc9e65c","object":"chat.completion","created":1784186814,"model":"unsloth27b","choice
+ 07-16 07:25:30 [kv_cache_utils.py:2169] Maximum concurrency for 262,144 tokens per request: 4.24x
+CODER RESTORED
+
+################################################################
+### ALL DONE
+################################################################

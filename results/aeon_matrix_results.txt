@@ -1,0 +1,84 @@
+
+################################################################
+### 1) Ornith on AEON 0.24  [current production image]
+################################################################
+MemAvailable before boot: 117 GiB
+0e5706920d11abec5504e8b09b9603c8fed5d9805d8b37c2df80786ee61f9e29
+ornith-ab starting (util=0.55 seqs=4); waiting for health
+LLM ready
+--- zombie check ---
+OK — engine answered a real request
+--- kernels ---
+ 07-16 04:20:53 [cuda.py:539] Using backend AttentionBackendEnum.FLASH_ATTN for vit attention
+ 07-16 04:20:53 [mm_encoder_attention.py:373] Using AttentionBackendEnum.FLASH_ATTN for MMEncoderAttention.
+ 07-16 04:20:53 [qwen_gdn_linear_attn.py:228] Using Triton/FLA GDN prefill kernel (requested=auto, head_k_dim=128).
+ 07-16 04:20:53 [__init__.py:892] Using MarlinNvFp4LinearKernel for NVFP4 GEMM
+ 07-16 04:20:53 [nvfp4.py:270] Using 'MARLIN' NvFp4 MoE backend out of potential backends: ['FLASHINFER_TRTLLM', 'FLASHINFER_CUTEDSL', 'FLASHINFER_CUTEDSL_BATCHED', 'FLASHINFER_CUTLASS', 'VLLM_CUTLASS', 'MARLIN', 'EMULATION'].
+--- KV pool ---
+ 07-16 04:25:48 [kv_cache_utils.py:2147] Maximum concurrency for 262,144 tokens per request: 2.68x
+--- PREFILL pp8192 ---
+conc | wall_s | prefill tok/s | decode tok/s | TTFT mean | TTFT p95 | ok
+   1 |    1.8 |          4638 |          0.6 |      1.76 |     1.76 | 1/1
+   1 |    1.8 |          4518 |          0.6 |      1.81 |     1.81 | 1/1
+--- PREFILL pp32768 ---
+conc | wall_s | prefill tok/s | decode tok/s | TTFT mean | TTFT p95 | ok
+   1 |    7.8 |          4206 |          0.1 |      7.79 |     7.79 | 1/1
+   1 |    7.8 |          4208 |          0.1 |      7.78 |     7.78 | 1/1
+--- DECODE c1,c4 ---
+conc | wall_s | prefill tok/s | decode tok/s | TTFT mean | TTFT p95 | ok
+   1 |    3.6 |            10 |         70.8 |      0.10 |     0.10 | 1/1
+   1 |    4.1 |             9 |         61.7 |      0.12 |     0.12 | 1/1
+   4 |    9.7 |            15 |        105.1 |      4.25 |     4.25 | 4/4
+   4 |    5.8 |            26 |        177.2 |      0.13 |     0.13 | 4/4
+DFlash acceptance = 44.1%
+
+################################################################
+### 2) Ornith on AEON 0.25.0  [new image — delete candidate]
+################################################################
+MemAvailable before boot: 117 GiB
+eda33bfff4aba69e5f6453d684353356bc00c17f5beb0f717cb9ada76ab28850
+ornith-ab starting (util=0.55 seqs=4); waiting for health
+LLM ready
+--- zombie check ---
+OK — engine answered a real request
+--- kernels ---
+ 07-16 04:29:15 [cuda.py:535] Using backend AttentionBackendEnum.FLASH_ATTN for vit attention
+ 07-16 04:29:15 [mm_encoder_attention.py:373] Using AttentionBackendEnum.FLASH_ATTN for MMEncoderAttention.
+ 07-16 04:29:15 [qwen_gdn_linear_attn.py:228] Using Triton/FLA GDN prefill kernel (requested=auto, head_k_dim=128).
+ 07-16 04:29:15 [__init__.py:929] Using MarlinNvFp4LinearKernel for NVFP4 GEMM
+ 07-16 04:29:15 [nvfp4.py:285] Using 'MARLIN' NvFp4 MoE backend out of potential backends: ['FLASHINFER_TRTLLM', 'FLASHINFER_CUTEDSL', 'FLASHINFER_CUTEDSL_BATCHED', 'FLASHINFER_CUTLASS', 'VLLM_CUTLASS', 'MARLIN', 'HUMMING', 'EMULATION'].
+--- KV pool ---
+ 07-16 04:34:47 [kv_cache_utils.py:2158] Maximum concurrency for 262,144 tokens per request: 2.69x
+--- PREFILL pp8192 ---
+conc | wall_s | prefill tok/s | decode tok/s | TTFT mean | TTFT p95 | ok
+   1 |    1.7 |          4714 |          0.6 |      1.73 |     1.73 | 1/1
+   1 |    1.7 |          4808 |          0.6 |      1.70 |     1.70 | 1/1
+--- PREFILL pp32768 ---
+conc | wall_s | prefill tok/s | decode tok/s | TTFT mean | TTFT p95 | ok
+   1 |    7.6 |          4314 |          0.1 |      7.59 |     7.59 | 1/1
+   1 |    7.7 |          4257 |          0.1 |      7.69 |     7.69 | 1/1
+--- DECODE c1,c4 ---
+conc | wall_s | prefill tok/s | decode tok/s | TTFT mean | TTFT p95 | ok
+   1 |    4.1 |             9 |         63.2 |      0.10 |     0.10 | 1/1
+   1 |    4.0 |             9 |         63.6 |      0.10 |     0.10 | 1/1
+   4 |   10.5 |            14 |         97.1 |      3.89 |     4.76 | 4/4
+   4 |    6.0 |            25 |        171.4 |      0.32 |     0.32 | 4/4
+DFlash acceptance = 40.5%
+
+################################################################
+### 3) RESTORE — 27B coding-solo (U=0.74, N=4, DFlash k=10)
+################################################################
+unsloth27b-v025
+unsloth27b-v025
+unsloth27b-v025
+MemAvailable before boot: 117 GiB
+a2ace965cd97f52e69ca94ea68d8ce57935107da1057b60fcecfe00f0c80558e
+unsloth27b-v025 starting (image=eugr/spark-vllm:latest util=0.74 seqs=4 kv=fp8 spec={"method":"dflash","model":"/models/dflash-drafter","num_speculative_tokens":10}); waiting for health
+LLM ready
+{"id":"chatcmpl-831f779b3fa27e48","object":"chat.completion","created":1784176955,"model":"unsloth27b","choices":[{"inde
+ 07-16 04:41:04 [kv_cache_utils.py:2169] Maximum concurrency for 262,144 tokens per request: 4.23x
+CODER RESTORED
+
+################################################################
+### AEON MATRIX COMPLETE
+################################################################

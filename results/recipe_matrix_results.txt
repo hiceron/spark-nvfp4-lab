@@ -1,0 +1,151 @@
+
+################################################################
+### A) 35B OLD recipe — moe=auto, MTP k=3  [current daily driver]
+################################################################
+Speculative config: {"method":"mtp","num_speculative_tokens":3}
+MemAvailable before boot: 117 GiB
+266adfdb4d2f625128c4fd2a5c038bb7ce1b9ff61916d53335b7693a137e0a24
+unsloth35b-v025 starting (image=eugr/spark-vllm:latest util=0.55 seqs=8 moe=auto imgs=8); waiting for health
+LLM ready
+--- zombie check (real completion) ---
+OK — engine answered a real request
+--- kernels ---
+ 07-15 19:59:20 [cuda.py:535] Using backend AttentionBackendEnum.FLASH_ATTN for vit attention
+ 07-15 19:59:20 [mm_encoder_attention.py:373] Using AttentionBackendEnum.FLASH_ATTN for MMEncoderAttention.
+ 07-15 19:59:20 [qwen_gdn_linear_attn.py:228] Using Triton/FLA GDN prefill kernel (requested=auto, head_k_dim=128).
+ 07-15 19:59:20 [__init__.py:974] Using FlashInferCutlassNvFp4LinearKernel for NVFP4 GEMM
+ 07-15 19:59:20 [nvfp4.py:295] Using 'FLASHINFER_CUTLASS' NvFp4 MoE backend out of potential backends: ['FLASHINFER_TRTLLM', 'FLASHINFER_CUTEDSL', 'FLASHINFER_CUTEDSL_BATCHED', 'FLASHINFER_CUTLASS', 'VLLM_CUTLASS', 'MARLIN', 'HUMMING', 'EMULATION'].
+ 07-15 19:59:20 [cuda.py:476] Using FLASHINFER attention backend out of potential backends: ['FLASHINFER', 'TRITON_ATTN'].
+--- KV pool ---
+ 07-15 20:03:01 [kv_cache_utils.py:2169] Maximum concurrency for 262,144 tokens per request: 10.65x
+--- PREFILL pp8192 (c=1) ---
+conc | wall_s | prefill tok/s | decode tok/s | TTFT mean | TTFT p95 | ok
+   1 |    1.2 |          6694 |          0.8 |      1.22 |     1.22 | 1/1
+   1 |    1.3 |          6488 |          0.8 |      1.26 |     1.26 | 1/1
+--- PREFILL pp32768 (c=1) — user's real-world size ---
+conc | wall_s | prefill tok/s | decode tok/s | TTFT mean | TTFT p95 | ok
+   1 |    6.8 |          4824 |          0.1 |      6.79 |     6.79 | 1/1
+   1 |    6.8 |          4850 |          0.1 |      6.75 |     6.75 | 1/1
+--- DECODE (c=1, c=8) ---
+conc | wall_s | prefill tok/s | decode tok/s | TTFT mean | TTFT p95 | ok
+   1 |    3.0 |            12 |         86.0 |      0.10 |     0.10 | 1/1
+   1 |    2.9 |            13 |         89.6 |      0.10 |     0.10 | 1/1
+   8 |    6.4 |            47 |        321.8 |      0.52 |     0.55 | 8/8
+   8 |    6.1 |            49 |        336.2 |      0.24 |     0.25 | 8/8
+--- spec-decode acceptance ---
+draft=4587.0 accepted=3111.0
+acceptance = 67.8%
+
+################################################################
+### B) 35B NEW recipe — moe=flashinfer_b12x, MTP k=2, triton draft MoE  [r0b0tlab/unsloth]
+################################################################
+Speculative config: {"method":"mtp","num_speculative_tokens":2,"moe_backend":"triton"}
+MemAvailable before boot: 117 GiB
+1f969bd1124bf8c4c8a483e41205feb4161110c5337332415b59c901e27caac7
+unsloth35b-v025 starting (image=eugr/spark-vllm:latest util=0.55 seqs=8 moe=flashinfer_b12x imgs=8); waiting for health
+LLM ready
+--- zombie check (real completion) ---
+OK — engine answered a real request
+--- kernels ---
+ 07-15 20:05:49 [cuda.py:535] Using backend AttentionBackendEnum.FLASH_ATTN for vit attention
+ 07-15 20:05:49 [mm_encoder_attention.py:373] Using AttentionBackendEnum.FLASH_ATTN for MMEncoderAttention.
+ 07-15 20:05:50 [qwen_gdn_linear_attn.py:228] Using Triton/FLA GDN prefill kernel (requested=auto, head_k_dim=128).
+ 07-15 20:05:50 [__init__.py:974] Using FlashInferCutlassNvFp4LinearKernel for NVFP4 GEMM
+ 07-15 20:05:50 [nvfp4.py:247] Using 'FLASHINFER_B12X' NvFp4 MoE backend out of potential backends: ['FLASHINFER_TRTLLM', 'FLASHINFER_CUTEDSL', 'FLASHINFER_CUTEDSL_BATCHED', 'FLASHINFER_CUTLASS', 'VLLM_CUTLASS', 'MARLIN', 'HUMMING', 'EMULATION'].
+ 07-15 20:05:50 [cuda.py:476] Using FLASHINFER attention backend out of potential backends: ['FLASHINFER', 'TRITON_ATTN'].
+--- KV pool ---
+ 07-15 20:10:03 [kv_cache_utils.py:2169] Maximum concurrency for 262,144 tokens per request: 3.62x
+--- PREFILL pp8192 (c=1) ---
+conc | wall_s | prefill tok/s | decode tok/s | TTFT mean | TTFT p95 | ok
+   1 |    1.2 |          6645 |          0.8 |      1.23 |     1.23 | 1/1
+   1 |    1.2 |          6775 |          0.8 |      1.21 |     1.21 | 1/1
+--- PREFILL pp32768 (c=1) — user's real-world size ---
+conc | wall_s | prefill tok/s | decode tok/s | TTFT mean | TTFT p95 | ok
+   1 |    6.6 |          4968 |          0.2 |      6.59 |     6.59 | 1/1
+   1 |    6.6 |          4993 |          0.2 |      6.56 |     6.56 | 1/1
+--- DECODE (c=1, c=8) ---
+conc | wall_s | prefill tok/s | decode tok/s | TTFT mean | TTFT p95 | ok
+   1 |    3.4 |            11 |         75.2 |      0.10 |     0.10 | 1/1
+   1 |    3.1 |            12 |         81.8 |      0.10 |     0.10 | 1/1
+   8 |   11.1 |            27 |        183.8 |      4.31 |     4.73 | 8/8
+   8 |    6.1 |            50 |        337.3 |      0.22 |     0.23 | 8/8
+--- spec-decode acceptance ---
+draft=3698.0 accepted=2792.0
+acceptance = 75.5%
+
+################################################################
+### C) 27B OLD recipe — DFlash k=10, fp8, auto  [current coding model]
+################################################################
+MemAvailable before boot: 117 GiB
+373ad2dd5a62d776f0a78dbf5ea1af8d2622b074346f7a4999f69d30588ec213
+unsloth27b-v025 starting (image=eugr/spark-vllm:latest util=0.55 seqs=8 kv=fp8 spec={"method":"dflash","model":"/models/dflash-drafter","num_speculative_tokens":10}); waiting for health
+LLM ready
+--- zombie check (real completion) ---
+OK — engine answered a real request
+--- kernels ---
+ 07-15 20:13:46 [cuda.py:535] Using backend AttentionBackendEnum.FLASH_ATTN for vit attention
+ 07-15 20:13:46 [mm_encoder_attention.py:373] Using AttentionBackendEnum.FLASH_ATTN for MMEncoderAttention.
+ 07-15 20:13:46 [qwen_gdn_linear_attn.py:228] Using Triton/FLA GDN prefill kernel (requested=auto, head_k_dim=128).
+ 07-15 20:13:46 [__init__.py:974] Using FlashInferCutlassNvFp4LinearKernel for NVFP4 GEMM
+ 07-15 20:13:48 [cuda.py:476] Using FLASHINFER attention backend out of potential backends: ['FLASHINFER', 'TRITON_ATTN'].
+--- KV pool ---
+ 07-15 20:18:37 [kv_cache_utils.py:2169] Maximum concurrency for 262,144 tokens per request: 1.89x
+--- PREFILL pp8192 (c=1) ---
+conc | wall_s | prefill tok/s | decode tok/s | TTFT mean | TTFT p95 | ok
+   1 |    5.1 |          1606 |          0.2 |      5.09 |     5.09 | 1/1
+   1 |    5.1 |          1602 |          0.2 |      5.10 |     5.10 | 1/1
+--- PREFILL pp32768 (c=1) — user's real-world size ---
+conc | wall_s | prefill tok/s | decode tok/s | TTFT mean | TTFT p95 | ok
+   1 |   30.0 |          1092 |          0.0 |     29.98 |    29.98 | 1/1
+   1 |   30.3 |          1081 |          0.0 |     30.30 |    30.30 | 1/1
+--- DECODE (c=1, c=8) ---
+conc | wall_s | prefill tok/s | decode tok/s | TTFT mean | TTFT p95 | ok
+   1 |    9.3 |             4 |         27.6 |      0.32 |     0.32 | 1/1
+   1 |    7.7 |             5 |         33.3 |      0.31 |     0.31 | 1/1
+   8 |   16.0 |            19 |        128.3 |      0.65 |     0.68 | 8/8
+   8 |   14.0 |            21 |        146.3 |      0.65 |     0.67 | 8/8
+--- spec-decode acceptance ---
+draft=11020.0 accepted=3581.0
+acceptance = 32.5%
+
+################################################################
+### D) 27B NEW attempt — linear_backend=flashinfer_b12x + DFlash k=10  [may reject: dense/GDN/vision layers]
+################################################################
+Linear backend forced: flashinfer_b12x
+MemAvailable before boot: 117 GiB
+8ce6e13d1a3793be3b938f7eda863216cbfdc0aa46f791fd4a06fc540099002b
+unsloth27b-v025 starting (image=eugr/spark-vllm:latest util=0.55 seqs=8 kv=fp8 spec={"method":"dflash","model":"/models/dflash-drafter","num_speculative_tokens":10}); waiting for health
+CONTAINER DIED during startup — last logs:
+(APIServer pid=1)     return cls(
+(APIServer pid=1)            ^^^^
+(APIServer pid=1)   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/async_llm.py", line 146, in __init__
+(APIServer pid=1)     self.engine_core = EngineCoreClient.make_async_mp_client(
+(APIServer pid=1)                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1)   File "/usr/local/lib/python3.12/dist-packages/vllm/tracing/otel.py", line 178, in sync_wrapper
+(APIServer pid=1)     return func(*args, **kwargs)
+(APIServer pid=1)            ^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1)   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/core_client.py", line 132, in make_async_mp_client
+(APIServer pid=1)     return AsyncMPClient(*client_args)
+(APIServer pid=1)            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1)   File "/usr/local/lib/python3.12/dist-packages/vllm/tracing/otel.py", line 178, in sync_wrapper
+(APIServer pid=1)     return func(*args, **kwargs)
+(APIServer pid=1)            ^^^^^^^^^^^^^^^^^^^^^
+(APIServer pid=1)   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/core_client.py", line 963, in __init__
+(APIServer pid=1)     super().__init__(
+(APIServer pid=1)   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/core_client.py", line 573, in __init__
+(APIServer pid=1)     with launch_core_engines(
+(APIServer pid=1)   File "/usr/lib/python3.12/contextlib.py", line 144, in __exit__
+(APIServer pid=1)     next(self.gen)
+(APIServer pid=1)   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/utils.py", line 1213, in launch_core_engines
+(APIServer pid=1)     wait_for_engine_startup(
+(APIServer pid=1)   File "/usr/local/lib/python3.12/dist-packages/vllm/v1/engine/utils.py", line 1272, in wait_for_engine_startup
+(APIServer pid=1)     raise RuntimeError(
+(APIServer pid=1) RuntimeError: Engine core initialization failed. See root cause above. Failed core proc(s): {}
+BOOT FAILED — root cause:
+(EngineCore pid=190) ERROR 07-15 20:28:16 [core.py:1231]     raise ValueError(
+(EngineCore pid=190) ERROR 07-15 20:28:16 [core.py:1231] ValueError: --linear-backend=flashinfer_b12x was requested but no 'flashinfer_b12x' kernel exists for this layer type.
+(EngineCore pid=190)     raise ValueError(
+
+################################################################
+### MATRIX COMPLETE — results also saved to /home/hiceron/recipe_matrix_results.txt
+################################################################
