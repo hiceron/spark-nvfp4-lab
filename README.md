@@ -1,5 +1,7 @@
 # DGX Spark (GB10 / sm_121) — NVFP4 serving: what we actually measured
 
+**Blog:** https://hiceron.github.io/spark-nvfp4-lab/ · **Author:** [Dawid / @Hiceron2](https://x.com/Hiceron2)
+
 One DGX Spark. Two weeks of chasing a **1.79×** speedup claim. This repo is the receipts:
 the recipe that finally made the fast kernels engage, the measurements showing they don't
 help *on this hardware*, the prefill curves nobody publishes, and the operational failure
