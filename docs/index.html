@@ -1,745 +1,521 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>DGX Spark NVFP4 — what I actually measured</title>
-  <meta name="description" content="One DGX Spark, two weeks of NVFP4 serving benchmarks: b12x+MTP recipe, −11% on GB10, prefill curves, category-dependent spec-decode, AEON image A/B. Recipes, failures, raw logs." />
-  <meta name="author" content="Dawid (@Hiceron2)" />
-  <meta property="og:title" content="DGX Spark NVFP4 — what I actually measured" />
-  <meta property="og:description" content="926 tok/s aggregate · b12x loses on GB10 · prefill is a curve · spec-decode is category-dependent." />
-  <meta property="og:type" content="article" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <style>
-    :root {
-      --bg: #0b0d10;
-      --bg2: #12161c;
-      --bg3: #1a2029;
-      --border: #2a3340;
-      --text: #e8edf4;
-      --muted: #8b97a8;
-      --dim: #5c6a7c;
-      --accent: #5b9fd4;
-      --green: #3dcc91;
-      --red: #f07178;
-      --amber: #e6b450;
-      --purple: #c792ea;
-      --radius: 10px;
-      --max: 820px;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html { scroll-behavior: smooth; }
-    body {
-      font-family: "IBM Plex Sans", system-ui, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.65;
-      font-size: 17px;
-      -webkit-font-smoothing: antialiased;
-    }
-    a { color: var(--accent); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    code, pre, .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
-    .wrap { max-width: var(--max); margin: 0 auto; padding: 0 1.25rem; }
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="926 tok/s aggregate and 21x of 262k context from one DGX Spark (GB10) — measured NVFP4 serving recipes for the unsloth and AEON stacks, with failures included.">
+<meta name="author" content="Dawid (@Hiceron2)">
+<meta property="og:title" content="926 tok/s on one DGX Spark — the NVFP4 recipes that got me there">
+<meta property="og:description" content="Four days of benchmarking and optimizing NVFP4 on a GB10 — recipes, KV-vs-util data, and the failure modes, measured.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://hiceron.github.io/spark-nvfp4-lab/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:creator" content="@Hiceron2">
+<title>926 tok/s on one DGX Spark — the NVFP4 recipes that got me there</title>
+<style>
+  :root{
+    --ground:#FBFBFC; --panel:#F1F3F7; --panel-2:#E7EAF1; --rule:#DBE0E9;
+    --ink:#12161B; --ink-2:#3D4756; --muted:#5C6675;
+    --amber:#B0761F; --blue:#4372D6; --crit:#B3332C; --good:#2E7D4F;
+    --mono: ui-monospace,"SF Mono","Cascadia Mono","Roboto Mono",Menlo,Consolas,monospace;
+    --sans: system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+    --measure:68ch;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{--ground:#12161B; --panel:#1A1F26; --panel-2:#222932; --rule:#2C3540;
+      --ink:#E3E8EF; --ink-2:#BAC4D2; --muted:#8794A6;
+      --amber:#C6862B; --blue:#5B8DEF; --crit:#D9544D; --good:#4CAF7A}
+  }
+  :root[data-theme="dark"]{--ground:#12161B; --panel:#1A1F26; --panel-2:#222932; --rule:#2C3540;
+    --ink:#E3E8EF; --ink-2:#BAC4D2; --muted:#8794A6;
+    --amber:#C6862B; --blue:#5B8DEF; --crit:#D9544D; --good:#4CAF7A}
+  :root[data-theme="light"]{--ground:#FBFBFC; --panel:#F1F3F7; --panel-2:#E7EAF1; --rule:#DBE0E9;
+    --ink:#12161B; --ink-2:#3D4756; --muted:#5C6675;
+    --amber:#B0761F; --blue:#4372D6; --crit:#B3332C; --good:#2E7D4F}
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--ground); color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased}
+  .wrap{max-width:var(--measure); margin:0 auto; padding:0 24px}
+  .bleed{max-width:1080px; margin:0 auto; padding:0 24px}
+  header{border-bottom:1px solid var(--rule); padding:56px 0 36px}
+  .eyebrow{font-family:var(--mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin:0 0 18px}
+  h1{font-family:var(--mono); font-weight:600; font-size:clamp(27px,4.2vw,42px); line-height:1.16; letter-spacing:-.02em; text-wrap:balance; margin:0 0 18px}
+  h1 em{font-style:normal; color:var(--amber)}
+  .standfirst{font-size:19px; color:var(--ink-2); margin:0; text-wrap:pretty}
+  .byline{font-family:var(--mono); font-size:12.5px; color:var(--muted); margin-top:24px; display:flex; flex-wrap:wrap; gap:8px 18px}
+  h2{font-family:var(--mono); font-size:22px; font-weight:600; letter-spacing:-.01em; margin:58px 0 8px; text-wrap:balance; scroll-margin-top:64px}
+  h2 .num{color:var(--amber); margin-right:10px}
+  h3{font-family:var(--mono); font-size:16px; font-weight:600; margin:34px 0 6px}
+  p{margin:0 0 18px; text-wrap:pretty}
+  a{color:var(--ink); text-decoration:underline; text-decoration-color:var(--amber); text-underline-offset:3px}
+  a:hover{color:var(--amber)}
+  a:focus-visible{outline:2px solid var(--amber); outline-offset:3px; border-radius:2px}
+  strong{font-weight:650}
+  .lede{font-size:18.5px; color:var(--ink-2)}
+  .tabbar{position:sticky; top:0; z-index:5; background:var(--ground); border-bottom:1px solid var(--rule); margin-bottom:44px}
+  .tabbar .bleed{display:flex; gap:0; justify-content:center}
+  .tabbtn{appearance:none; background:none; border:none; cursor:pointer; font-family:var(--mono); font-size:14px; font-weight:600; color:var(--muted); padding:16px 26px 14px; border-bottom:2px solid transparent; margin-bottom:-1px; text-align:center}
+  .tabbtn:hover{color:var(--ink)}
+  .tabbtn[aria-selected="true"]{color:var(--ink); border-bottom-color:var(--amber)}
+  .tabbtn .tag{display:block; font-weight:400; font-size:11px; letter-spacing:.06em; text-transform:uppercase; margin-top:3px}
+  .tabbtn:focus-visible{outline:2px solid var(--amber); outline-offset:-2px}
+  .tabpanel[hidden]{display:none}
+  .tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(185px,1fr)); gap:2px; margin:0 0 12px}
+  .tile{background:var(--panel); padding:18px 20px; border-top:2px solid var(--rule)}
+  .tile.win{border-top-color:var(--good)} .tile.warn{border-top-color:var(--amber)} .tile.bad{border-top-color:var(--crit)}
+  .tile .k{font-family:var(--mono); font-size:11.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin:0 0 8px}
+  .tile .v{font-family:var(--mono); font-size:25px; font-weight:600; letter-spacing:-.02em; font-variant-numeric:tabular-nums; margin:0}
+  .tile .v.bad{color:var(--crit)} .tile .v.win{color:var(--good)}
+  .tile .s{font-size:13.5px; color:var(--muted); margin:6px 0 0; line-height:1.45}
+  .quick{background:var(--panel); padding:22px 24px; margin:0 0 26px}
+  .quick .lbl{font-family:var(--mono); font-size:11.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--amber); display:block; margin-bottom:12px}
+  .quick ul{margin:0; padding:0; list-style:none; display:grid; gap:9px}
+  .quick li{padding-left:20px; position:relative; font-size:15.5px; color:var(--ink-2)}
+  .quick li::before{content:"→"; position:absolute; left:0; color:var(--amber); font-family:var(--mono)}
+  .quick li strong{color:var(--ink)}
+  pre{background:var(--panel); border-left:2px solid var(--amber); padding:16px 18px; overflow-x:auto; margin:0 0 20px; font-family:var(--mono); font-size:13px; line-height:1.6; color:var(--ink-2)}
+  pre.err{border-left-color:var(--crit)}
+  code{font-family:var(--mono); font-size:.88em; background:var(--panel); padding:1px 5px; border-radius:3px}
+  pre code{background:none; padding:0; font-size:inherit}
+  .tablewrap{overflow-x:auto; margin:0 0 22px; background:var(--panel)}
+  table{border-collapse:collapse; width:100%; font-size:14px; min-width:480px}
+  caption{font-family:var(--mono); font-size:11.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); text-align:left; padding:14px 18px 0}
+  th,td{padding:9px 16px; text-align:right; border-bottom:1px solid var(--rule); font-variant-numeric:tabular-nums}
+  th:first-child,td:first-child{text-align:left; font-family:var(--mono); font-size:13px}
+  thead th{font-family:var(--mono); font-size:11.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); font-weight:500; border-bottom:1px solid var(--ink-2)}
+  tbody tr:last-child td{border-bottom:none}
+  td.win{color:var(--good); font-weight:650} td.bad{color:var(--crit); font-weight:650} td.hi{color:var(--amber); font-weight:650}
+  .swatch{display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:7px}
+  .grid2{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:2px; margin:0 0 22px}
+  figure{margin:0 0 26px; background:var(--panel); padding:20px 18px 14px}
+  figcaption{font-size:13px; color:var(--muted); margin-top:12px; line-height:1.5}
+  .legend{display:flex; gap:18px; font-family:var(--mono); font-size:12px; color:var(--ink-2); margin:0 0 14px; flex-wrap:wrap}
+  .legend span{display:flex; align-items:center}
+  svg{display:block; width:100%; height:auto}
+  svg rect.bar{transition:opacity .12s}
+  svg g:hover rect.bar{opacity:.78}
+  .note{background:var(--panel-2); padding:18px 20px; margin:0 0 22px; font-size:15px; color:var(--ink-2)}
+  .note.warn{border-left:2px solid var(--crit)}
+  .note p:last-child{margin-bottom:0}
+  .note .lbl{font-family:var(--mono); font-size:11.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:7px}
+  .credits{display:grid; gap:2px; margin:0 0 22px}
+  .credit{background:var(--panel); padding:16px 20px; display:grid; grid-template-columns:170px 1fr; gap:6px 20px}
+  .credit .who{font-family:var(--mono); font-size:13.5px; font-weight:600}
+  .credit .what{font-size:14.5px; color:var(--ink-2)}
+  @media (max-width:620px){ .credit{grid-template-columns:1fr} }
+  footer{border-top:1px solid var(--rule); margin-top:72px; padding:32px 0 64px; color:var(--muted); font-size:14px}
+  @media (prefers-reduced-motion:reduce){ *{transition:none!important; animation:none!important} }
 
-    /* Nav */
-    nav {
-      position: sticky; top: 0; z-index: 50;
-      background: rgba(11,13,16,0.92);
-      backdrop-filter: blur(12px);
-      border-bottom: 1px solid var(--border);
-    }
-    nav .inner {
-      max-width: var(--max); margin: 0 auto;
-      padding: 0.7rem 1.25rem;
-      display: flex; gap: 1.1rem; align-items: center;
-      font-size: 0.82rem; flex-wrap: wrap;
-    }
-    nav a { color: var(--muted); }
-    nav a:hover { color: var(--text); text-decoration: none; }
-    nav .brand { color: var(--text); font-weight: 600; margin-right: auto; }
-
-    /* Hero */
-    header.hero {
-      padding: 3.5rem 0 2.5rem;
-      border-bottom: 1px solid var(--border);
-      background:
-        radial-gradient(ellipse 80% 60% at 20% 0%, rgba(91,159,212,0.12), transparent 60%),
-        radial-gradient(ellipse 60% 50% at 90% 20%, rgba(61,204,145,0.06), transparent 50%),
-        var(--bg);
-    }
-    .eyebrow {
-      font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase;
-      color: var(--accent); font-weight: 600; margin-bottom: 0.85rem;
-    }
-    h1 {
-      font-size: clamp(1.75rem, 4.5vw, 2.45rem);
-      line-height: 1.2; font-weight: 700; letter-spacing: -0.02em;
-      margin-bottom: 1rem;
-    }
-    .lede { font-size: 1.1rem; color: var(--muted); max-width: 62ch; margin-bottom: 1.25rem; }
-    .byline {
-      font-size: 0.9rem; color: var(--dim);
-      border-left: 2px solid var(--border); padding-left: 0.85rem; margin-bottom: 2rem;
-    }
-    .byline strong { color: var(--muted); font-weight: 500; }
-
-    /* Tiles */
-    .tiles {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 0.75rem;
-    }
-    @media (min-width: 640px) {
-      .tiles { grid-template-columns: repeat(4, 1fr); }
-    }
-    .tile {
-      background: var(--bg2);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 1rem 0.9rem;
-    }
-    .tile .label {
-      font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
-      color: var(--dim); margin-bottom: 0.4rem; font-weight: 600;
-    }
-    .tile .value {
-      font-family: "IBM Plex Mono", monospace;
-      font-size: 1.35rem; font-weight: 600; line-height: 1.2;
-    }
-    .tile .sub { font-size: 0.75rem; color: var(--muted); margin-top: 0.35rem; }
-    .tile.green .value { color: var(--green); }
-    .tile.red .value { color: var(--red); }
-    .tile.amber .value { color: var(--amber); }
-    .tile.blue .value { color: var(--accent); }
-
-    /* Content */
-    main { padding: 2.5rem 0 4rem; }
-    section { margin-bottom: 3.25rem; scroll-margin-top: 3.5rem; }
-    h2 {
-      font-size: 1.45rem; font-weight: 700; letter-spacing: -0.015em;
-      margin-bottom: 0.85rem; padding-bottom: 0.5rem;
-      border-bottom: 1px solid var(--border);
-    }
-    h3 {
-      font-size: 1.05rem; font-weight: 600; margin: 1.5rem 0 0.6rem; color: var(--text);
-    }
-    p { margin-bottom: 1rem; color: #d0d7e0; }
-    p.note {
-      font-size: 0.92rem; color: var(--muted);
-      background: var(--bg2); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 0.85rem 1rem;
-    }
-    ul, ol { margin: 0 0 1rem 1.25rem; color: #d0d7e0; }
-    li { margin-bottom: 0.35rem; }
-    strong { color: var(--text); font-weight: 600; }
-    .tag {
-      display: inline-block; font-size: 0.72rem; font-weight: 600;
-      padding: 0.15rem 0.5rem; border-radius: 4px;
-      background: var(--bg3); color: var(--muted); border: 1px solid var(--border);
-      margin-right: 0.35rem; vertical-align: middle;
-    }
-    .tag.red { color: var(--red); border-color: rgba(240,113,120,0.35); background: rgba(240,113,120,0.08); }
-    .tag.green { color: var(--green); border-color: rgba(61,204,145,0.35); background: rgba(61,204,145,0.08); }
-    .tag.amber { color: var(--amber); border-color: rgba(230,180,80,0.35); background: rgba(230,180,80,0.08); }
-
-    /* Tables */
-    .table-wrap {
-      overflow-x: auto; margin: 1rem 0 1.25rem;
-      border: 1px solid var(--border); border-radius: var(--radius);
-    }
-    table {
-      width: 100%; border-collapse: collapse; font-size: 0.88rem;
-      font-family: "IBM Plex Mono", monospace;
-    }
-    th, td {
-      padding: 0.6rem 0.75rem; text-align: left;
-      border-bottom: 1px solid var(--border);
-    }
-    th {
-      background: var(--bg3); color: var(--muted);
-      font-weight: 600; font-size: 0.75rem;
-      text-transform: uppercase; letter-spacing: 0.04em;
-    }
-    tr:last-child td { border-bottom: none; }
-    td { color: #c5ced9; }
-    td.good { color: var(--green); font-weight: 600; }
-    td.bad { color: var(--red); font-weight: 600; }
-    tr:hover td { background: rgba(255,255,255,0.02); }
-
-    /* Code */
-    pre {
-      background: var(--bg2); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 1rem 1.1rem;
-      overflow-x: auto; font-size: 0.8rem; line-height: 1.55;
-      margin: 1rem 0 1.25rem; color: #c8d0db;
-    }
-    code {
-      font-size: 0.88em;
-      background: var(--bg3); padding: 0.1em 0.35em; border-radius: 4px;
-      color: #d4dce8;
-    }
-    pre code { background: none; padding: 0; font-size: inherit; }
-
-    /* Chart */
-    .chart {
-      background: var(--bg2); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 1.25rem 1.1rem 1rem;
-      margin: 1rem 0 1.25rem;
-    }
-    .chart-title {
-      font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em;
-      color: var(--dim); font-weight: 600; margin-bottom: 1rem;
-    }
-    .bar-row {
-      display: grid; grid-template-columns: 7.5rem 1fr 4.5rem;
-      gap: 0.6rem; align-items: center; margin-bottom: 0.55rem;
-      font-size: 0.8rem; font-family: "IBM Plex Mono", monospace;
-    }
-    .bar-label { color: var(--muted); text-align: right; }
-    .bar-track {
-      height: 1.35rem; background: var(--bg3); border-radius: 4px; overflow: hidden;
-    }
-    .bar-fill {
-      height: 100%; border-radius: 4px;
-      display: flex; align-items: center; padding-left: 0.5rem;
-      font-size: 0.7rem; font-weight: 600; color: #0b0d10;
-      min-width: 2px;
-    }
-    .bar-fill.moe { background: linear-gradient(90deg, #3d8ec9, #5b9fd4); }
-    .bar-fill.dense { background: linear-gradient(90deg, #9b6bc9, #c792ea); }
-    .bar-val { color: var(--text); font-weight: 500; }
-
-    /* Mini cards for A/B */
-    .ab-grid {
-      display: grid; grid-template-columns: 1fr;
-      gap: 0.75rem; margin: 1rem 0;
-    }
-    @media (min-width: 640px) {
-      .ab-grid { grid-template-columns: repeat(3, 1fr); }
-    }
-    .ab-card {
-      background: var(--bg2); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 1rem;
-    }
-    .ab-card h4 {
-      font-size: 0.9rem; font-weight: 600; margin-bottom: 0.65rem;
-    }
-    .ab-metric {
-      display: flex; justify-content: space-between;
-      font-size: 0.8rem; font-family: "IBM Plex Mono", monospace;
-      padding: 0.3rem 0; border-bottom: 1px solid var(--border); color: var(--muted);
-    }
-    .ab-metric:last-child { border-bottom: none; }
-    .ab-metric .v { color: var(--text); font-weight: 500; }
-    .ab-verdict {
-      margin-top: 0.75rem; font-size: 0.78rem; font-weight: 600;
-      text-transform: uppercase; letter-spacing: 0.04em;
-    }
-    .ab-verdict.win { color: var(--green); }
-    .ab-verdict.tie { color: var(--amber); }
-
-    /* Callout */
-    .callout {
-      border-left: 3px solid var(--accent);
-      background: rgba(91,159,212,0.07);
-      padding: 0.9rem 1rem; margin: 1.25rem 0;
-      border-radius: 0 var(--radius) var(--radius) 0;
-      font-size: 0.95rem; color: #c5d0dc;
-    }
-    .callout.warn {
-      border-left-color: var(--amber);
-      background: rgba(230,180,80,0.07);
-    }
-    .callout.bad {
-      border-left-color: var(--red);
-      background: rgba(240,113,120,0.07);
-    }
-
-    /* Links row */
-    .links {
-      display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 1.5rem 0;
-    }
-    .btn {
-      display: inline-flex; align-items: center; gap: 0.4rem;
-      padding: 0.55rem 1rem; border-radius: 8px;
-      font-size: 0.88rem; font-weight: 600;
-      border: 1px solid var(--border); background: var(--bg2); color: var(--text);
-      text-decoration: none; transition: border-color 0.15s, background 0.15s;
-    }
-    .btn:hover { border-color: var(--accent); background: var(--bg3); text-decoration: none; }
-    .btn.primary { background: var(--accent); border-color: var(--accent); color: #0b0d10; }
-    .btn.primary:hover { filter: brightness(1.08); }
-
-    footer {
-      border-top: 1px solid var(--border);
-      padding: 2rem 0 3rem; color: var(--dim); font-size: 0.85rem;
-    }
-    footer p { color: var(--dim); margin-bottom: 0.4rem; }
-
-    .toc {
-      background: var(--bg2); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 1rem 1.15rem; margin: 0 0 2.5rem;
-    }
-    .toc h3 { margin: 0 0 0.5rem; font-size: 0.8rem; text-transform: uppercase;
-      letter-spacing: 0.05em; color: var(--dim); }
-    .toc ol { margin: 0 0 0 1.1rem; font-size: 0.9rem; }
-    .toc a { color: var(--muted); }
-    .toc a:hover { color: var(--accent); }
-  </style>
+  .themebtn{position:fixed; top:14px; right:14px; z-index:20; width:38px; height:38px;
+    border-radius:50%; border:1px solid var(--rule); background:var(--panel); color:var(--ink);
+    cursor:pointer; font-size:16px; line-height:1; display:flex; align-items:center; justify-content:center}
+  .themebtn:hover{border-color:var(--amber)}
+  .themebtn:focus-visible{outline:2px solid var(--amber); outline-offset:2px}
+</style>
 </head>
 <body>
-  <nav>
-    <div class="inner">
-      <a class="brand" href="#">spark-nvfp4-lab</a>
-      <a href="#recipe">Recipe</a>
-      <a href="#b12x">b12x</a>
-      <a href="#prefill">Prefill</a>
-      <a href="#category">Category</a>
-      <a href="#aeon">AEON A/B</a>
-      <a href="#failures">Failures</a>
-      <a href="https://github.com/hiceron/spark-nvfp4-lab">GitHub</a>
-    </div>
-  </nav>
+<button class="themebtn" id="themebtn" aria-label="Switch between dark and light theme" title="Theme">◐</button>
+<header>
+  <div class="wrap">
+    <p class="eyebrow">DGX Spark · GB10 / sm_121 · field notes</p>
+    <h1><em>926 tok/s</em> on one DGX Spark — and up to <em>21× of 262k context</em> in the KV cache. Here's exactly how.</h1>
+    <p class="standfirst">The <a href="https://huggingface.co/unsloth/Qwen3.6-35B-A3B-NVFP4-Fast">unsloth Qwen3.6 NVFP4 checkpoints</a> dropped last week. I spent four days benchmarking <strong>and optimizing</strong> them on a GB10 — testing what works and what doesn't <em>for DGX Spark specifically</em> — next to the uncensored <a href="https://github.com/AEON-7">AEON</a> stack. Same box, same bench, one variable at a time. Full recipes below, including the failures.</p>
+    <p class="byline">
+      <span>One GB10 · 121 GiB unified · ~273 GB/s</span>
+      <span>driver 595.71.05 · FlashInfer 0.6.15</span>
+      <span>All figures measured, not quoted</span>
+      <span>Written with Claude (Anthropic) &amp; Rem, my personal AI agent</span>
+      <span><a href="https://x.com/Hiceron2">@Hiceron2</a> · <a href="https://github.com/hiceron/spark-nvfp4-lab">github.com/hiceron/spark-nvfp4-lab</a></span>
+    </p>
+  </div>
+</header>
 
-  <header class="hero">
-    <div class="wrap">
-      <div class="eyebrow">DGX Spark · GB10 · sm_121 · July 2026</div>
-      <h1>NVFP4 on one DGX Spark:<br />what I actually measured</h1>
-      <p class="lede">
-        Two weeks chasing a 1.79× speedup claim. The recipe that finally made the fast
-        kernels engage — then the measurements showing they don't help <em>on this hardware</em>.
-        Prefill curves nobody publishes. Spec-decode speed as a category property.
-        One hard-locked machine.
-      </p>
-      <p class="byline">
-        <strong>Dawid</strong> · <a href="https://x.com/Hiceron2">@Hiceron2</a><br />
-        Written with Claude (Anthropic) &amp; Rem, my personal AI agent.
-      </p>
+<main>
 
-      <div class="tiles" id="hero-tiles">
-        <div class="tile green">
-          <div class="label">Aggregate decode</div>
-          <div class="value">926</div>
-          <div class="sub">tok/s · 64 streams · U=0.55</div>
-        </div>
-        <div class="tile red">
-          <div class="label">b12x on GB10</div>
-          <div class="value">−11%</div>
-          <div class="sub">decode · KV 10.65× → 3.62×</div>
-        </div>
-        <div class="tile amber">
-          <div class="label">Dense 32k TTFT</div>
-          <div class="value">30 s</div>
-          <div class="sub">vs 6.8 s on MoE 35B</div>
-        </div>
-        <div class="tile blue">
-          <div class="label">AEON 27B image</div>
-          <div class="value">+22%</div>
-          <div class="sub">0.24 → 0.25.0 decode</div>
-        </div>
-      </div>
+<div class="wrap">
+  <h2 style="margin-top:44px"><span class="num">▸</span>Replicate the headline in three commands</h2>
+  <p>Everything the 926 tok/s and the giant KV pool come from — no custom container, no patches:</p>
+  <pre><code># 1. the image: nightly vLLM main built for GB10 (by eugr)
+docker pull eugr/spark-vllm:latest
 
-      <div class="links">
-        <a class="btn primary" href="https://github.com/hiceron/spark-nvfp4-lab">Open the repo</a>
-        <a class="btn" href="https://github.com/hiceron/spark-nvfp4-lab/blob/main/DEPLOY.md">Copy-paste recipes</a>
-        <a class="btn" href="https://github.com/hiceron/spark-nvfp4-lab/blob/main/FINDINGS.md">All measurements</a>
-        <a class="btn" href="https://github.com/hiceron/spark-nvfp4-lab/tree/main/results">Raw logs</a>
-      </div>
-    </div>
-  </header>
-
-  <main class="wrap">
-    <div class="toc">
-      <h3>On this page</h3>
-      <ol>
-        <li><a href="#standing">Standing on other people's work</a></li>
-        <li><a href="#recipe">The daily-driver recipe</a></li>
-        <li><a href="#b12x">b12x + MTP: engages, then loses</a></li>
-        <li><a href="#util">What util actually buys</a></li>
-        <li><a href="#prefill">Prefill is a curve</a></li>
-        <li><a href="#category">Spec-decode is category-dependent</a></li>
-        <li><a href="#aeon">AEON image A/B</a></li>
-        <li><a href="#method">Method &amp; two wrong conclusions</a></li>
-        <li><a href="#failures">Five ways the box dies</a></li>
-      </ol>
-    </div>
-
-    <section id="standing">
-      <h2>Standing on other people's work</h2>
-      <p>
-        This writeup exists because others published first. Where my numbers disagree with
-        theirs, it's hardware or model context — not a claim that they're wrong.
-        <strong>Stacks compare only against themselves.</strong>
-      </p>
-      <ul>
-        <li><a href="https://unsloth.ai/docs/models/qwen3.6#nvfp4">unsloth</a> — NVFP4 checkpoints, <code>CUTE_DSL_ARCH=sm_121a</code>, b12x probe, published MMLU-Pro</li>
-        <li><a href="https://github.com/r0b0tlab/qwen36-35b-a3b-nvfp4-sm121-vllm">r0b0tlab</a> — the key phrase: "B12X routed experts + MTP k=2, <strong>Triton draft MoE</strong>"</li>
-        <li><a href="https://walterra.dev/blog/2026-07-15-vllm-ultimate-gx10-aeon-snake">walterra.dev</a> — persistent vllm-cache mount, fork-starvation warning at high util</li>
-        <li><a href="https://github.com/eugr/spark-vllm-docker">eugr/spark-vllm-docker</a> — the image the unsloth stack runs on; drop_caches; honest "not fully optimized" note</li>
-        <li><a href="https://github.com/AEON-7/vllm-ultimate-dgx-spark">AEON-7</a> — uncensored images, DFlash drafters, Spark-measured model cards</li>
-      </ul>
-    </section>
-
-    <section id="recipe">
-      <h2>The daily-driver recipe</h2>
-      <p>
-        What one Spark delivers with the unsloth stack on <code>eugr/spark-vllm:latest</code>:
-      </p>
-      <ul>
-        <li><strong>35B-A3B:</strong> 89–95 tok/s single-stream · <strong>10.65× full-262k KV</strong> at U=0.55 (21.46× at 0.65) · 926 tok/s aggregate at 64 streams</li>
-        <li><strong>27B dense:</strong> 33.5–35.5 tok/s with an AEON DFlash drafter grafted onto unsloth weights (+35%)</li>
-      </ul>
-      <p>Three commands. No custom builds. Leave <code>--moe-backend auto</code> — I measured the b12x path as a loss on this box.</p>
-      <pre><code>docker pull eugr/spark-vllm:latest
-mkdir -p ~/vllm-cache
-
+# 2. serve unsloth's 35B MoE — fp8 KV + MTP; let vLLM pick kernels (auto beats forcing, measured below)
 docker run -d --name unsloth35b --gpus all --ipc=host --net=host \
   -e CUTE_DSL_ARCH=sm_121a \
   -v ~/.cache/huggingface:/root/.cache/huggingface \
   -v ~/vllm-cache:/root/.cache/vllm \
   --entrypoint vllm eugr/spark-vllm:latest \
   serve unsloth/Qwen3.6-35B-A3B-NVFP4-Fast \
-  --served-model-name unsloth35b \
   --host 0.0.0.0 --port 8888 --trust-remote-code \
   --kv-cache-dtype fp8 --moe-backend auto \
   --gpu-memory-utilization 0.55 --max-model-len 262144 \
-  --max-num-seqs 8 --max-num-batched-tokens 32768 \
+  --max-num-seqs 64 --max-num-batched-tokens 32768 \
   --enable-chunked-prefill --async-scheduling --enable-prefix-caching \
-  --speculative-config '{"method":"mtp","num_speculative_tokens":3}' \
-  --reasoning-parser qwen3 --tool-call-parser qwen3_xml --enable-auto-tool-choice</code></pre>
-      <p class="note">
-        ⚠️ Universal rules: never set util above 0.80 (OS lives in the same 121&nbsp;GiB).
-        Between switches: stop → <code>drop_caches</code> → boot. After every boot, send one
-        <em>real</em> completion — <code>/health</code> lies. Full recipes for both stacks:
-        <a href="https://github.com/hiceron/spark-nvfp4-lab/blob/main/DEPLOY.md">DEPLOY.md</a>.
-      </p>
-    </section>
+  --speculative-config '{"method":"mtp","num_speculative_tokens":3}'
 
-    <section id="b12x">
-      <h2>b12x + MTP: the recipe nobody documents — then the plot twist</h2>
-      <p>
-        unsloth's Spark advice (<code>--moe-backend flashinfer_b12x</code>) dies the moment you add MTP:
-      </p>
-      <pre><code>ValueError: moe_backend='flashinfer_b12x' is not supported for unquantized MoE.
+# 3. after EVERY boot: send one real request before trusting anything (health lies — see below)
+curl -s http://127.0.0.1:8888/v1/chat/completions -H 'Content-Type: application/json' \
+  -d '{"model":"unsloth/Qwen3.6-35B-A3B-NVFP4-Fast","messages":[{"role":"user","content":"hi"}],"max_tokens":8}'</code></pre>
+  <p>Notes that save you a day: the <code>~/vllm-cache</code> mount persists compile/autotune caches across container rebuilds (cold boot 13–16 min → warm ~2 min on some images — h/t <a href="https://walterra.dev/blog/2026-07-15-vllm-ultimate-gx10-aeon-snake">walterra</a>). <code>--max-num-seqs</code> is your parallel-request ceiling; 64 was my sweep max. Utilization 0.55 already holds ~10 full-262k contexts; 0.65 held ~21× in an earlier run. <strong>Never go above 0.80 on unified memory</strong> — the OS lives in the same RAM, and things die ugly (documented below).</p>
+</div>
+
+<nav class="tabbar" aria-label="Model stacks">
+  <div class="bleed" role="tablist">
+    <button class="tabbtn" id="tab-u" role="tab" aria-selected="true" aria-controls="panel-u">unsloth NVFP4<span class="tag">censored · vLLM main (eugr)</span></button>
+    <button class="tabbtn" id="tab-a" role="tab" aria-selected="false" aria-controls="panel-a">AEON stack<span class="tag">uncensored · aeon-vllm-ultimate</span></button>
+  </div>
+</nav>
+
+<!-- ================= UNSLOTH TAB ================= -->
+<section class="tabpanel" id="panel-u" role="tabpanel" aria-labelledby="tab-u">
+
+<div class="wrap">
+  <p class="lede">Two checkpoints: <a href="https://huggingface.co/unsloth/Qwen3.6-35B-A3B-NVFP4-Fast"><code>Qwen3.6-35B-A3B-NVFP4-Fast</code></a> (MoE, 3B active) and <a href="https://huggingface.co/unsloth/Qwen3.6-27B-NVFP4"><code>Qwen3.6-27B-NVFP4</code></a> (dense). <strong>Unsloth's published numbers were not measured on a DGX Spark</strong> — they're real figures from other hardware. The point of this table is what changes when the hardware is a GB10.</p>
+
+  <h2><span class="num">·</span>Their (non-Spark) claims vs this box</h2>
+</div>
+<div class="bleed">
+  <div class="tablewrap">
+    <table>
+      <caption>unsloth published (other hardware) vs measured on this GB10 · different benches — direction, not decimals</caption>
+      <thead><tr><th>Figure</th><th>unsloth published</th><th>Measured on this GB10</th><th>Why the gap</th></tr></thead>
+      <tbody>
+        <tr><td>35B-A3B decode</td><td>295.2 tok/s (cute-DSL)</td><td>89–95 tok/s c=1 · 336 agg c=8 · <strong>926 agg c=64</strong></td><td>theirs is batch-aggregate on faster-memory hardware; mine crosses it at high concurrency</td></tr>
+        <tr><td>27B decode</td><td>125.9 tok/s (cute-DSL)</td><td>33.5–35.5 tok/s</td><td>GB10 has 273 GB/s memory bandwidth — a dense 27B physically can't stream weights faster than ~26 tok/s without speculation here</td></tr>
+        <tr><td>"1.79× faster than FP8"</td><td>—</td><td>b12x kernels measured: <strong>prefill flat, decode −11%</strong></td><td class="bad">doesn't transfer to GB10 (explained below)</td></tr>
+        <tr><td>MMLU-Pro 35B / 27B</td><td>85.85 / 86.25</td><td>(their data, not re-measured)</td><td>decides the model choice in section 05</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="tiles">
+    <div class="tile win"><p class="k">Aggregate @ 64 streams</p><p class="v win">926 tok/s</p><p class="s">35B-A3B, MTP k=3, U=0.55 — no throughput wall found up to 64</p></div>
+    <div class="tile win"><p class="k">KV pool @262k</p><p class="v win">10.65×</p><p class="s">at U=0.55 — and <strong>21.46×</strong> recorded at U=0.65. Never exceed 0.80 util</p></div>
+    <div class="tile win"><p class="k">27B w/ DFlash graft</p><p class="v win">33.5–35.5</p><p class="s">tok/s — +35% over stock, fastest 27B-class figure I've seen published for GB10</p></div>
+    <div class="tile warn"><p class="k">b12x, engaged properly</p><p class="v bad">−11%</p><p class="s">decode, and KV pool cut 10.65× → 3.62×</p></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="quick">
+    <span class="lbl">What I achieved / fixed — the short version</span>
+    <ul>
+      <li><strong>926 tok/s aggregate at 64 concurrent streams</strong> — and still climbing at the ceiling I tested</li>
+      <li><strong>10.65× full-262k KV at U=0.55, up to 21.46× at U=0.65</strong> — fp8 KV works because unsloth ships calibration scales. Hard rule: never above 0.80 util on unified memory</li>
+      <li><strong>b12x + MTP together</strong> — documented nowhere: the speculative drafter needs its own backend (<code>"moe_backend":"triton"</code> inside <code>--speculative-config</code>)</li>
+      <li><strong>Measured b12x as a net loss on GB10</strong> — with the mechanism, not a shrug</li>
+      <li><strong>27B +35% via AEON's DFlash drafter grafted onto unsloth weights</strong> (hidden size &amp; vocab match)</li>
+      <li><strong>Prefill measured as a curve, not a number</strong> — the single-figure prefill quote is a myth</li>
+    </ul>
+  </div>
+
+  <h2><span class="num">01</span>The b12x recipe — and what it's for</h2>
+  <p>For DGX Spark, unsloth recommend <code>--moe-backend flashinfer_b12x</code>. Their concern is valid: on <em>their</em> quant scheme, falling back to Marlin kernels costs ~2.5×. But add MTP speculation and the flag kills the boot:</p>
+  <pre class="err"><code>ValueError: moe_backend='flashinfer_b12x' is not supported for unquantized MoE.
 Expected one of ['triton', 'flashinfer_trtllm', 'flashinfer_cutlass', 'aiter'].</code></pre>
-      <p>
-        The MTP <strong>draft head ships unquantized</strong>, and <code>--moe-backend</code> is global.
-        The fix: <code>SpeculativeConfig</code> has its <em>own</em> <code>moe_backend</code> field.
-        h/t r0b0tlab — his config implied this all along.
-      </p>
-      <pre><code>export CUTE_DSL_ARCH=sm_121a
+  <p>The MTP <strong>draft head ships unquantized</strong> and the flag applies to every layer. The fix — implied by <a href="https://github.com/r0b0tlab/qwen36-35b-a3b-nvfp4-sm121-vllm">r0b0tlab's config</a>, spelled out nowhere:</p>
+  <pre><code>export CUTE_DSL_ARCH=sm_121a
+
 vllm serve unsloth/Qwen3.6-35B-A3B-NVFP4-Fast \
   --moe-backend flashinfer_b12x \
   --speculative-config '{"method":"mtp","num_speculative_tokens":2,"moe_backend":"triton"}'</code></pre>
-      <p>Log confirms it: <code>Using 'FLASHINFER_B12X' NvFp4 MoE backend</code>. Then I measured it.</p>
+  <p>The log confirms <code>Using 'FLASHINFER_B12X' NvFp4 MoE backend</code>. It boots, it answers, it's real.</p>
 
-      <h3 id="b12x-table">Same box, same bench — only the backend changed</h3>
-      <p>
-        <span class="tag">35B-A3B-NVFP4-Fast</span>
-        <span class="tag">U=0.55</span>
-        <span class="tag">N=8</span>
-        <span class="tag">fp8 KV</span>
-      </p>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Metric</th>
-              <th>auto (Cutlass) + MTP k=3</th>
-              <th>b12x + Triton draft + MTP k=2</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Prefill pp8192</td>
-              <td>6,694 / 6,488</td>
-              <td>6,645 / 6,775</td>
-            </tr>
-            <tr>
-              <td>Prefill pp32768</td>
-              <td>4,824 / 4,850</td>
-              <td>4,968 / 4,993</td>
-            </tr>
-            <tr>
-              <td>Decode c=1</td>
-              <td class="good">86.0 / 89.6</td>
-              <td class="bad">75.2 / 81.8</td>
-            </tr>
-            <tr>
-              <td>Decode c=8</td>
-              <td class="good">322 / 336</td>
-              <td>184* / 337</td>
-            </tr>
-            <tr>
-              <td>KV @262k</td>
-              <td class="good">10.65×</td>
-              <td class="bad">3.62×</td>
-            </tr>
-            <tr>
-              <td>MTP acceptance</td>
-              <td>67.8%</td>
-              <td>75.5%</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p style="font-size:0.85rem;color:var(--dim)">* first rep outlier (TTFT 4.3 s)</p>
+  <h2><span class="num">02</span>Auto vs b12x — vLLM's own picks win on this box</h2>
+  <p>To be precise about what's being compared: <strong>both columns are unsloth's checkpoint.</strong> The left column lets vLLM auto-select kernels (it picks Cutlass — on my image the Marlin fallback unsloth warn about never happens). The right column is unsloth's Spark recommendation (b12x), made bootable with my drafter fix. Same box, same benchmark, same hour:</p>
+</div>
+<div class="bleed">
+  <div class="tablewrap">
+    <table>
+      <caption>35B-A3B · U=0.55 · N=8 · fp8 KV — my recipe (auto) vs the b12x path</caption>
+      <thead><tr><th>Metric</th><th>auto → Cutlass + MTP k=3 (mine)</th><th>b12x + Triton draft + MTP k=2</th></tr></thead>
+      <tbody>
+        <tr><td>Prefill pp8192</td><td>6,694 / 6,488</td><td>6,645 / 6,775</td></tr>
+        <tr><td>Prefill pp32768</td><td>4,824 / 4,850</td><td>4,968 / 4,993</td></tr>
+        <tr><td>Decode c=1</td><td class="win">86.0 / 89.6</td><td>75.2 / 81.8</td></tr>
+        <tr><td>Decode c=8</td><td>322 / 336</td><td>184* / 337</td></tr>
+        <tr><td>KV pool @262k</td><td class="win">10.65×</td><td class="bad">3.62×</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<div class="wrap">
+  <p>Prefill flat, decode −11%, KV pool cut to a third (b12x's workspace buffers eat it). <strong>This isn't unsloth being wrong — it's hardware context.</strong> The boot log shows why: <code>Using Triton/FLA GDN prefill kernel</code>. This model is a GDN hybrid, so prompt processing never touches the MoE math b12x accelerates, and generation speed on GB10 is pinned by memory bandwidth, not compute. b12x's 1.79× is real where MoE compute is the bottleneck. On a GB10 with this architecture, it isn't — so <strong>vLLM's auto selection is the optimal Spark config</strong>, and now that's a measurement.</p>
 
-      <div class="callout bad">
-        <strong>Prefill flat · decode −11% · KV pool cut to a third.</strong>
-        The 35B-A3B is a GDN hybrid — prefill runs on a Triton/FLA kernel and never touches
-        the MoE GEMMs b12x accelerates. Decode on GB10 is bandwidth-bound at ~273&nbsp;GB/s.
-        unsloth's 1.79× is real where MoE compute <em>is</em> the bottleneck. On this box, it isn't.
-      </div>
-      <p>
-        One honesty check: unsloth warn that without b12x you fall back to Marlin W4A16.
-        I never hit that — <code>auto</code> picks <strong>Cutlass</strong>, not Marlin. Their advice is right
-        for the case they describe; it didn't apply here.
-      </p>
-    </section>
+  <h2><span class="num">03</span>What GPU utilization actually buys</h2>
+  <p><code>gpu-memory-utilization</code> is how much of the 121 GiB the engine reserves. People treat it as a speed dial. It isn't one: <strong>generation speed doesn't change with it at all.</strong> What it buys is KV cache — the working memory that holds conversations — which means more parallel sessions and longer contexts:</p>
+</div>
+<div class="bleed">
+  <div class="tablewrap">
+    <table>
+      <caption>KV pool vs utilization — decode identical in every row · "10.65×" = ten full 262k-token conversations at once</caption>
+      <thead><tr><th>Model</th><th>util</th><th>KV @262k</th><th>Decode c=1</th></tr></thead>
+      <tbody>
+        <tr><td>35B-A3B (fp8 KV)</td><td>0.55</td><td class="hi">10.65×</td><td>86–90</td></tr>
+        <tr><td>35B-A3B (fp8 KV)</td><td>0.65</td><td class="hi">21.46×</td><td>same</td></tr>
+        <tr><td>27B dense (fp8 KV)</td><td>0.55</td><td>1.90×</td><td>30–33</td></tr>
+        <tr><td>27B dense (fp8 KV)</td><td>0.74</td><td class="hi">4.24×</td><td>same</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<div class="wrap">
+  <p>Two hard ceilings before you crank it: the operating system lives in the <em>same</em> 121 GiB (push past ~0.85 and the OS can't even spawn processes — SSH hangs, ports never open), and speculative-decoding scratch memory allocates <em>outside</em> this setting entirely (the AEON tab has the full story — it cost me a power-cycle). <strong>House rule: 0.80 max, and leave more if anything else runs on the box.</strong></p>
 
-    <section id="util">
-      <h2>What <code>gpu-memory-utilization</code> actually buys</h2>
-      <p>On unified memory: <strong>KV pool, not speed</strong>.</p>
-      <ul>
-        <li>35B: 0.55 → 10.65× of 262k · 0.65 → 21.46× — decode identical</li>
-        <li>27B: 0.55 → 1.9× · 0.74 → 4.24× — decode identical</li>
-      </ul>
-      <div class="callout warn">
-        Hard ceiling is real: spec-decode buffers scale with <code>max-num-seqs</code>
-        <em>outside</em> util accounting. U=0.80 + 4 DFlash seqs hard-locked my box.
-        Power button. See <a href="https://github.com/hiceron/spark-nvfp4-lab/blob/main/TROUBLESHOOTING.md">TROUBLESHOOTING.md</a>.
-      </div>
-    </section>
-
-    <section id="prefill">
-      <h2>Prefill is a curve, not a number</h2>
-      <p>
-        Everyone quotes a single prefill number. It's meaningless without context length.
-        Single request, prefix cache defeated:
-      </p>
-
-      <div class="chart" id="prefill-chart">
-        <div class="chart-title">Prefill throughput vs prompt length (tok/s)</div>
-        <div class="bar-row">
-          <div class="bar-label">35B @ 8k</div>
-          <div class="bar-track"><div class="bar-fill moe" style="width:100%"></div></div>
-          <div class="bar-val">6,600</div>
-        </div>
-        <div class="bar-row">
-          <div class="bar-label">35B @ 32k</div>
-          <div class="bar-track"><div class="bar-fill moe" style="width:73.5%"></div></div>
-          <div class="bar-val">4,850</div>
-        </div>
-        <div class="bar-row">
-          <div class="bar-label">27B @ 8k</div>
-          <div class="bar-track"><div class="bar-fill dense" style="width:24.2%"></div></div>
-          <div class="bar-val">1,600</div>
-        </div>
-        <div class="bar-row">
-          <div class="bar-label">27B @ 32k</div>
-          <div class="bar-track"><div class="bar-fill dense" style="width:16.4%"></div></div>
-          <div class="bar-val">1,085</div>
-        </div>
-        <p style="font-size:0.78rem;color:var(--dim);margin:0.75rem 0 0;font-family:IBM Plex Sans,sans-serif">
-          Blue = MoE 35B-A3B · Purple = dense 27B · scale relative to 6,600 peak
-        </p>
-      </div>
-
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr><th>Prompt</th><th>35B-A3B (fp8 KV)</th><th>27B dense (fp8 KV)</th></tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>8k</td>
-              <td>6,600 tok/s · TTFT 1.2 s</td>
-              <td>1,600 tok/s · TTFT 5.1 s</td>
-            </tr>
-            <tr>
-              <td>32k</td>
-              <td>4,850 tok/s · TTFT 6.8 s</td>
-              <td class="bad">1,085 tok/s · TTFT 30.0 s</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p>
-        A 32k prompt = 6.8 s to first token on the MoE, <strong>30 s</strong> on the dense.
-        Benchmarks put them 0.4 MMLU-Pro apart (unsloth's published figures). My real coding
-        use still prefers the dense one for quality — pick per workload.
-      </p>
-    </section>
-
-    <section id="category">
-      <h2>Speculative decoding is a category property</h2>
-      <p>
-        Same 27B (unsloth weights + AEON DFlash drafter graft), same config, non-streaming,
-        200-token outputs — only the prompt type changed:
-      </p>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Category</th>
-              <th>k=10</th>
-              <th>k=15 (AEON's headline k)</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>math</td>
-              <td class="good">44.6</td>
-              <td>33.5 (spread 21.8–43.3)</td>
-            </tr>
-            <tr>
-              <td>JSON</td>
-              <td>36.7</td>
-              <td class="good">41.6</td>
-            </tr>
-            <tr>
-              <td>coding</td>
-              <td>32.6</td>
-              <td>35.7</td>
-            </tr>
-            <tr>
-              <td>prose</td>
-              <td>27.3</td>
-              <td>27.6</td>
-            </tr>
-            <tr>
-              <td>KV @262k</td>
-              <td class="good">4.24×</td>
-              <td>3.77×</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="callout">
-        When you see a "peak" tok/s for a spec-decode model, ask which category it was.
-        Optimal draft length <strong>k</strong> belongs to the checkpoint+drafter pair —
-        k=15 is AEON's tuned headline; on my grafted drafter it's net-flat with worse
-        variance and a smaller KV pool. <strong>k=10 stays.</strong>
-        The "gap" with AEON's published 27B numbers dissolves once category and k are understood.
-      </div>
-    </section>
-
-    <section id="aeon">
-      <h2>AEON image 0.24 → 0.25.0 — test every checkpoint</h2>
-      <p>
-        Same boot script, same bench, only <code>IMAGE=</code> swapped.
-        I almost called it after testing one model — the <em>one of three</em> that showed nothing.
-      </p>
-
-      <div class="ab-grid" id="ab-tables">
-        <div class="ab-card">
-          <h4>Ornith 35B</h4>
-          <div class="ab-metric"><span>pp8192</span><span class="v">4,578 → 4,761</span></div>
-          <div class="ab-metric"><span>pp32768</span><span class="v">4,207 → 4,286</span></div>
-          <div class="ab-metric"><span>Decode c=1</span><span class="v">66.3 → 63.4</span></div>
-          <div class="ab-metric"><span>KV @262k</span><span class="v">2.68 → 2.69×</span></div>
-          <div class="ab-verdict tie">Dead heat</div>
-        </div>
-        <div class="ab-card">
-          <h4>Heretic 35B</h4>
-          <div class="ab-metric"><span>pp8192</span><span class="v">5,116 → 5,186</span></div>
-          <div class="ab-metric"><span>pp32768</span><span class="v">4,418 → 4,585</span></div>
-          <div class="ab-metric"><span>Decode c=1</span><span class="v">70.8 → 76.8</span></div>
-          <div class="ab-metric"><span>KV @262k</span><span class="v">2.69 → 2.88×</span></div>
-          <div class="ab-verdict win">+8.5% decode · 0.25 wins</div>
-        </div>
-        <div class="ab-card">
-          <h4>AEON 27B MTP</h4>
-          <div class="ab-metric"><span>pp8192</span><span class="v">1,757 → 1,885</span></div>
-          <div class="ab-metric"><span>pp32768</span><span class="v">1,322 → 1,456</span></div>
-          <div class="ab-metric"><span>Decode c=1</span><span class="v">25.0 → 30.4</span></div>
-          <div class="ab-metric"><span>Spec accept</span><span class="v">27.8 → 31.3%</span></div>
-          <div class="ab-verdict win">+22% decode · 0.25 wins big</div>
-        </div>
-      </div>
-
-      <p>
-        Where a win is claimed, three-rep ranges don't overlap. Ornith's own runs disagreed
-        by 15% — that's why its result is "dead heat," not a 4% claim.
-      </p>
-      <p>
-        Also settled: AEON checkpoints auto-pick <strong>Marlin</strong>. Forcing Cutlass rejects at boot
-        (<code>QuantKey(u8, scale(f8e4m3fn…))</code>). Marlin is the only backend for that quant format.
-        No speed left on the table.
-      </p>
-    </section>
-
-    <section id="method">
-      <h2>Method — and two conclusions I got wrong</h2>
-      <ul>
-        <li><strong>One variable at a time.</strong> Same boot script, same bench, same box. Image A/Bs swap only <code>IMAGE=</code>.</li>
-        <li><strong>Zombie rule.</strong> <code>/health</code> is a different process from the engine. Every number here comes from an engine that answered a real completion first.</li>
-        <li><strong>Reps until the spread is smaller than the claim.</strong> Two reps of ornith disagreed by 15% — that can't resolve a 4% delta.</li>
-        <li><strong>Prefill ≠ decode.</strong> A decode-only bench cannot tell you whether a kernel change helped prefill.</li>
-      </ul>
-      <div class="callout warn">
-        My bench <strong>streams</strong> tokens and reads ~15–25% lower than non-streaming tooling.
-        Ornith on one unchanged image: 68.6–71.9 here vs 92.7 non-streaming.
-        <strong>Do not compare these numbers against other people's</strong> — only same-script numbers are valid.
-      </div>
-      <h3>Wrong conclusion #1 — "new image is 20% slower"</h3>
-      <p>
-        Compared a fresh streaming measurement to a stored non-streaming baseline.
-        Same-script control: the images were identical. The 20% was measurement method.
-      </p>
-      <h3>Wrong conclusion #2 — "b12x is dead on sm_121"</h3>
-      <p>
-        Two flag failures said so. The probe said <code>b12x gemm True | b12x moe True</code> all along.
-        Real blocker was the unquantized MTP draft head — fixed by SpeculativeConfig.moe_backend.
-      </p>
-      <h3>Nearly wrong #3</h3>
-      <p>
-        Almost kept the old AEON image off a one-model (ornith) test. That would have cost the +22% on the 27B.
-      </p>
-    </section>
-
-    <section id="failures">
-      <h2>Five ways the box dies</h2>
-      <p>All specific to unified memory. Full catalog in
-        <a href="https://github.com/hiceron/spark-nvfp4-lab/blob/main/TROUBLESHOOTING.md">TROUBLESHOOTING.md</a>.</p>
-      <ol>
-        <li><strong>Ghost memory</strong> — engine gone, RAM not. Fix: <code>sync; echo 3 | sudo tee /proc/sys/vm/drop_caches</code></li>
-        <li><strong><code>docker restart</code> never works</strong> — re-enters ghost memory. Sequence: stop → drop_caches → start → real request</li>
-        <li><strong>Zombie boots</strong> — health OK, first token dies. Always send a real completion</li>
-        <li><strong>DFlash buffers invisible to util</strong> — U=0.80 + N=4 hard-locked the machine</li>
-        <li><strong>KV per seq varies 5×</strong> — don't reuse util across models (AEON 27B needs 27.14 GiB per 262k seq)</li>
-      </ol>
-    </section>
-
-    <section id="links">
-      <h2>Everything is open</h2>
-      <div class="links">
-        <a class="btn primary" href="https://github.com/hiceron/spark-nvfp4-lab">github.com/hiceron/spark-nvfp4-lab</a>
-        <a class="btn" href="https://github.com/hiceron/spark-nvfp4-lab/blob/main/DEPLOY.md">DEPLOY.md</a>
-        <a class="btn" href="https://github.com/hiceron/spark-nvfp4-lab/blob/main/FINDINGS.md">FINDINGS.md</a>
-        <a class="btn" href="https://github.com/hiceron/spark-nvfp4-lab/blob/main/METHODOLOGY.md">METHODOLOGY.md</a>
-        <a class="btn" href="https://github.com/hiceron/spark-nvfp4-lab/blob/main/TROUBLESHOOTING.md">TROUBLESHOOTING.md</a>
-        <a class="btn" href="https://github.com/hiceron/spark-nvfp4-lab/tree/main/results">results/</a>
-      </div>
-      <p style="margin-top:1rem;color:var(--muted);font-size:0.92rem">
-        Hardware: DGX Spark · GB10 (Grace-Blackwell, sm_121) · 121 GiB unified LPDDR5X ·
-        ~273 GB/s · driver 595.71.05 · eugr/spark-vllm + AEON-vllm-ultimate 0.24 / 0.25.0.
-      </p>
-    </section>
-  </main>
-
-  <footer>
-    <div class="wrap">
-      <p>MIT for the scripts. Measurements are facts — use them, and please say where they came from.</p>
-      <p>Dawid · <a href="https://x.com/Hiceron2">@Hiceron2</a> · Written with Claude (Anthropic) &amp; Rem</p>
-      <p style="margin-top:0.75rem">
-        h/t r0b0tlab · unsloth · AEON-7 · walterra · eugr — most of this started as their work.
-      </p>
+  <h2><span class="num">04</span>Prefill is a curve, not a number</h2>
+</div>
+<div class="bleed">
+  <figure>
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--amber)"></span>35B-A3B (MoE, fp8 KV)</span>
+      <span><span class="swatch" style="background:var(--blue)"></span>27B dense (fp8 KV)</span>
     </div>
-  </footer>
+    <svg viewBox="0 0 720 260" role="img" aria-label="Prefill throughput: 35B-A3B falls from 6,600 to 4,850 tokens per second between 8k and 32k context; 27B dense falls from 1,600 to 1,085.">
+      <g stroke="var(--rule)" stroke-width="1">
+        <line x1="86" y1="210" x2="700" y2="210"/><line x1="86" y1="152" x2="700" y2="152" opacity=".5"/>
+        <line x1="86" y1="94" x2="700" y2="94" opacity=".5"/><line x1="86" y1="36" x2="700" y2="36" opacity=".5"/>
+      </g>
+      <g font-family="ui-monospace,monospace" font-size="11" fill="var(--muted)" text-anchor="end">
+        <text x="76" y="214">0</text><text x="76" y="156">2,500</text><text x="76" y="98">5,000</text><text x="76" y="40">7,500</text>
+      </g>
+      <g><title>35B-A3B at 8k: 6,600 tok/s (TTFT 1.2 s)</title><rect class="bar" x="150" y="57" width="86" height="153" rx="4" fill="var(--amber)"/><text x="193" y="47" font-family="ui-monospace,monospace" font-size="13" font-weight="600" fill="var(--ink)" text-anchor="middle">6,600</text></g>
+      <g><title>27B dense at 8k: 1,600 tok/s (TTFT 5.1 s)</title><rect class="bar" x="240" y="173" width="86" height="37" rx="4" fill="var(--blue)"/><text x="283" y="163" font-family="ui-monospace,monospace" font-size="13" font-weight="600" fill="var(--ink)" text-anchor="middle">1,600</text></g>
+      <g><title>35B-A3B at 32k: 4,850 tok/s (TTFT 6.8 s)</title><rect class="bar" x="460" y="97" width="86" height="113" rx="4" fill="var(--amber)"/><text x="503" y="87" font-family="ui-monospace,monospace" font-size="13" font-weight="600" fill="var(--ink)" text-anchor="middle">4,850</text></g>
+      <g><title>27B dense at 32k: 1,085 tok/s (TTFT 30 s)</title><rect class="bar" x="550" y="185" width="86" height="25" rx="4" fill="var(--blue)"/><text x="593" y="175" font-family="ui-monospace,monospace" font-size="13" font-weight="600" fill="var(--ink)" text-anchor="middle">1,085</text></g>
+      <g font-family="ui-monospace,monospace" font-size="12" fill="var(--ink-2)" text-anchor="middle"><text x="238" y="232">8k prompt</text><text x="548" y="232">32k prompt</text></g>
+    </svg>
+    <figcaption>Single request, prompt caching defeated. A 32k prompt: <strong>6.8 s</strong> to first token on the MoE, <strong>30 s</strong> on the dense 27B — every message, before a single word appears. My own docs had "~7,000 tok/s" written down as <em>the</em> prefill number; it was an 8k-only figure.</figcaption>
+  </figure>
+</div>
+
+<div class="wrap">
+  <h2><span class="num">05</span>Dense vs MoE — read this before picking "the smart one"</h2>
+</div>
+<div class="bleed">
+  <div class="tablewrap">
+    <table>
+      <caption>Speed measured here · accuracy from unsloth's published figures</caption>
+      <thead><tr><th></th><th><span class="swatch" style="background:var(--amber)"></span>35B-A3B</th><th><span class="swatch" style="background:var(--blue)"></span>27B dense</th><th>ratio</th></tr></thead>
+      <tbody>
+        <tr><td>Prefill 8k / 32k</td><td>6,600 / 4,850</td><td>1,600 / 1,085</td><td class="win">4.1× / 4.5×</td></tr>
+        <tr><td>Decode c=1 / c=8</td><td>87.8 / 329</td><td>30.5 / 137</td><td class="win">2.9× / 2.4×</td></tr>
+        <tr><td>KV @262k</td><td>10.65×</td><td>1.89×</td><td class="win">5.6×</td></tr>
+        <tr><td>MMLU-Pro</td><td>85.85</td><td>86.25</td><td class="bad">−0.4</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<div class="wrap">
+  <p>On paper: 3–4× the speed for 0.4 benchmark points. In practice, one honest nuance from daily use: <strong>for coding specifically, the dense 27B still writes noticeably better code than that 0.4-point gap suggests</strong> — benchmarks and real work don't fully agree. My split: the dense 27B stays as the dedicated coding model on quality grounds; the MoE 35B does everything else, where its speed and 5.6× KV pool win outright. Pick per workload, not per leaderboard.</p>
+</div>
+
+</section>
+
+<!-- ================= AEON TAB ================= -->
+<section class="tabpanel" id="panel-a" role="tabpanel" aria-labelledby="tab-a" hidden>
+
+<div class="wrap">
+  <p class="lede">Three uncensored checkpoints by <a href="https://github.com/AEON-7">AEON-7</a> — <a href="https://huggingface.co/AEON-7/Ornith-1.0-35B-AEON-Ultimate-Uncensored-NVFP4">Ornith 35B</a>, <a href="https://huggingface.co/AEON-7/Qwen3.6-35B-A3B-heretic-NVFP4">heretic 35B</a>, and the <a href="https://huggingface.co/AEON-7/Qwen3.6-27B-AEON-Ultimate-Uncensored-Multimodal-NVFP4-MTP">27B MTP</a> — on his own <a href="https://github.com/AEON-7/vllm-ultimate-dgx-spark">sm_121a vLLM image</a> with DFlash speculative decoding. Unlike unsloth's, <strong>AEON's numbers ARE measured on a DGX Spark</strong>, so they compare directly. It's the best uncensored setup I've found for this box.</p>
+
+  <h2><span class="num">·</span>His published Spark figures vs this box</h2>
+</div>
+<div class="bleed">
+  <div class="tablewrap">
+    <table>
+      <caption>AEON published (from his model cards / repos, measured on GB10) vs measured here · his bench is category-based &amp; non-streaming; mine streams and reads ~15–25% lower — direction, not decimals</caption>
+      <thead><tr><th>Figure</th><th>AEON published</th><th>Measured here</th></tr></thead>
+      <tbody>
+        <tr><td>heretic 35B, single stream</td><td>75.2–123.6 tok/s by category (avg ~97)</td><td>76.8 mean (streaming) · 82–90 house bench — inside his range</td></tr>
+        <tr><td>heretic 35B, aggregate @ c=64</td><td>739.8 tok/s (DFlash k=11, U=0.85)</td><td>not replicated — I only ran heretic to c=4; his figure stands. (My own c=64 measurement, 926 tok/s, is the unsloth 35B with MTP — see the other tab; different checkpoint &amp; speculation, so not a head-to-head)</td></tr>
+        <tr><td>Ornith 35B, single stream</td><td>70.3–119 by category (avg 93.3)</td><td>92.7 coding / 91.0 chat (house bench) — matches</td></tr>
+        <tr><td>27B (DFlash, Spark)</td><td>median 38.5 · peak 71.3 tok/s <strong>(at k=15)</strong></td><td>by category <strong>(at k=10)</strong>: math 44.6 · json 36.7 · coding 32.6 · prose 27.3 — same territory once category is matched</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="wrap" style="max-width:none; padding:0; font-size:13.5px; color:var(--muted); margin-top:-12px">Decoding his "median 38.5 / peak 71.3": those are <strong>category statistics, single-stream</strong> — the median across six prompt types and the best of them, 200-token outputs, measured at DFlash k=15. Not concurrency. Speculative decoding's speed depends on how predictable the output is: math and JSON accept many drafted tokens, prose accepts few. My first "28–33" figure was one generic prompt with a streaming penalty; measured per-category at his output length, the numbers line up. I also tried his k=15 draft length on my setup: net-flat with worse variance and a smaller KV pool — <strong>the optimal k belongs to the checkpoint+drafter pair, not the method</strong>. Stacks are compared only against themselves on this page — a cross-stack row would compare checkpoints, speculation methods, and workloads all at once, and mean nothing.</p>
+  <div class="tiles">
+    <div class="tile win"><p class="k">27B MTP on new image</p><p class="v win">+22%</p><p class="s">decode 25.0 → 30.4 tok/s, image 0.24 → 0.25.0</p></div>
+    <div class="tile win"><p class="k">heretic on new image</p><p class="v win">+8.5%</p><p class="s">decode 70.8 → 76.8, KV 2.69× → 2.88×</p></div>
+    <div class="tile"><p class="k">ornith on new image</p><p class="v">±0%</p><p class="s">dead heat — the checkpoint I tested first</p></div>
+    <div class="tile warn"><p class="k">Marlin alternative</p><p class="v">none</p><p class="s">forcing Cutlass: rejected — Marlin is the only backend for this quant scheme</p></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="quick">
+    <span class="lbl">What I achieved / fixed — the short version</span>
+    <ul>
+      <li><strong>Migrated all three checkpoints to image 0.25.0</strong> after a full A/B: +22% (27B MTP), +8.5% (heretic), ±0 (ornith)</li>
+      <li><strong>Proved Marlin isn't a mistake here</strong>: forcing Cutlass rejects this quant scheme — no speed was left on the table</li>
+      <li><strong>Diagnosed the fp8-KV zombie boot</strong>: these checkpoints ship without fp8 calibration data, so the server <em>says</em> healthy and dies on the first message. BF16 KV is mandatory</li>
+      <li><strong>Sized the 27B MTP safely</strong>: it needs 27 GiB of cache per full-length conversation — recipe below, learned via one crashed machine</li>
+      <li><strong>Fixed the nightly restart</strong>: DFlash slows down over ~20 h and crashes ~23 h, and <code>docker restart</code> can never fix it on this hardware</li>
+    </ul>
+  </div>
+
+  <h2><span class="num">01</span>The image A/B I almost called wrong</h2>
+  <p>AEON shipped image <code>0.25.0</code> this week. My first pass tested <strong>one checkpoint, generation speed only</strong> — saw a dead heat, and nearly concluded "no gain." Then I tested all three, on prompt processing <em>and</em> generation, three runs each. Per model:</p>
+</div>
+<div class="bleed">
+  <div class="grid2">
+    <div class="tablewrap" style="margin:0">
+      <table style="min-width:0">
+        <caption>Ornith 35B · 0.24 → 0.25.0</caption>
+        <thead><tr><th></th><th>0.24</th><th>0.25.0</th></tr></thead>
+        <tbody>
+          <tr><td>Prefill 8k</td><td>4,578</td><td>4,761</td></tr>
+          <tr><td>Prefill 32k</td><td>4,207</td><td>4,286</td></tr>
+          <tr><td>Decode c=1</td><td>66.3</td><td>63.4</td></tr>
+          <tr><td>KV @262k</td><td>2.68×</td><td>2.69×</td></tr>
+          <tr><td>Verdict</td><td colspan="2"><strong>dead heat</strong> (runs varied ±15%)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tablewrap" style="margin:0">
+      <table style="min-width:0">
+        <caption>Heretic 35B · 0.24 → 0.25.0</caption>
+        <thead><tr><th></th><th>0.24</th><th>0.25.0</th></tr></thead>
+        <tbody>
+          <tr><td>Prefill 8k</td><td>5,116</td><td>5,186</td></tr>
+          <tr><td>Prefill 32k</td><td>4,418</td><td class="win">4,585</td></tr>
+          <tr><td>Decode c=1</td><td>70.8</td><td class="win">76.8</td></tr>
+          <tr><td>KV @262k</td><td>2.69×</td><td class="win">2.88×</td></tr>
+          <tr><td>Verdict</td><td colspan="2" class="win"><strong>+8.5% decode, +7% KV</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tablewrap" style="margin:0">
+      <table style="min-width:0">
+        <caption>27B MTP · 0.24 → 0.25.0</caption>
+        <thead><tr><th></th><th>0.24</th><th>0.25.0</th></tr></thead>
+        <tbody>
+          <tr><td>Prefill 8k</td><td>1,757</td><td class="win">1,885</td></tr>
+          <tr><td>Prefill 32k</td><td>1,322</td><td class="win">1,456</td></tr>
+          <tr><td>Decode c=1</td><td>25.0</td><td class="win">30.4</td></tr>
+          <tr><td>DFlash accept</td><td>27.8%</td><td class="win">31.3%</td></tr>
+          <tr><td>Verdict</td><td colspan="2" class="win"><strong>+22% decode</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div class="wrap">
+  <p>The checkpoint I happened to test first (ornith) was <strong>the only one of three that showed nothing</strong>. Stopping there would have discarded a 22% win and deleted the wrong 45 GB image. Where a win is claimed, the three runs on each side don't even overlap; ornith's own runs disagreed with each other by 15%, which is what "dead heat" means here.</p>
+
+  <h2><span class="num">02</span>Marlin is the ceiling — and that's now proven, not assumed</h2>
+  <p>Every AEON checkpoint auto-selects Marlin kernels. Unsloth flag Marlin as a 2.5× slowdown for <em>their</em> models, so I forced the faster Cutlass path on ornith and heretic:</p>
+  <pre class="err"><code>ValueError: NvFp4 MoE backend 'FLASHINFER_CUTLASS' does not support the deployment
+configuration since kernel does not support quantization scheme
+QuantKey(u8, scale(f8e4m3fn, static, GroupShape(row=1, col=16)), ...)</code></pre>
+  <p>Rejected on both. AEON's checkpoints use a different weight format than unsloth's, and in this build <strong>only Marlin implements it</strong>. Translation: the "slow path" warning doesn't apply across formats, nobody is leaving speed on the table, and this stack's numbers are what this stack does.</p>
+
+  <h2><span class="num">03</span>Sizing the 27B MTP without killing the box</h2>
+  <p>Plain-language version first. Every conversation the model holds open needs "working memory" (the KV cache) — and how much depends on the model. This 27B needs <strong>27 GiB for one full-length (262k-token) conversation</strong> — about five times what ornith needs. The <code>gpu-memory-utilization</code> number decides how much of the 121 GiB the engine may reserve; the cache has to fit inside that.</p>
+</div>
+<div class="bleed">
+  <div class="tablewrap">
+    <table>
+      <caption>what happens at each setting · N = parallel conversations allowed</caption>
+      <thead><tr><th>Setting</th><th>What happened</th><th>Use it?</th></tr></thead>
+      <tbody>
+        <tr><td>util 0.55</td><td>engine refuses to start — needs 27 GiB for one conversation, only 21.5 available</td><td class="bad">no</td></tr>
+        <tr><td>util 0.70 · N=2</td><td class="win">boots clean · 1.47 conversations of cache · 30.4 tok/s</td><td class="win">yes — the safe recipe</td></tr>
+        <tr><td>util 0.80 · N=4</td><td class="bad">machine hard-locked — no SSH, no ping, power button</td><td class="bad">never</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<div class="wrap">
+  <div class="note warn">
+    <span class="lbl">Why the last row killed the machine — the memory nobody counts</span>
+    <p>DFlash speculation runs a small helper model that guesses several words ahead, and <strong>each parallel conversation gets its own scratch space for those guesses</strong>. Here's the trap: that scratch space is <strong>not included</strong> in what <code>gpu-memory-utilization</code> accounts for. So at 0.80, the engine reserved ~97 of 121 GiB, every pre-boot check passed — and then four conversations' worth of guess-buffers allocated <em>on top</em>, in memory that also belongs to the operating system. On a normal PC that crashes a program; on unified memory it takes down the whole computer. Rule of thumb: whatever's left <em>outside</em> the engine must fit the OS <strong>plus</strong> (parallel conversations × drafter scratch). Lower the utilization or the conversation count — they multiply.</p>
+  </div>
+
+  <h2><span class="num">04</span>The 20-hour clock</h2>
+  <p>One more thing this stack demands: DFlash's guess-acceptance <strong>degrades over ~20 hours of uptime, and the engine crashes around hour 23</strong>. A nightly restart isn't hygiene here — it's survival. And the obvious way to do it, <code>docker restart</code>, <strong>can never work on this hardware</strong>: stopping the engine leaves ~90 GiB of "ghost" memory the driver hasn't returned yet, and the instantly-restarting container walks straight into it and dies. Mine failed silently every night until I caught the box dead one morning.</p>
+  <p>The sequence that works — with one term defined: "voice" below means the <strong>speech containers</strong> (Qwen3 speech-to-text and text-to-speech) I run beside the LLM for voice chat; they hold memory the LLM needs back while it reboots:</p>
+  <pre><code>detect which LLM container is running
+→ pause the voice (speech) containers        # they hold unified memory
+→ docker stop the LLM
+→ sync; echo 3 > /proc/sys/vm/drop_caches    # releases the ghost memory (~4 s)
+→ docker start the LLM                       # same container = exact same config
+→ wait for /health
+→ send ONE REAL CHAT REQUEST                 # /health lies; the engine can be dead behind it
+→ restart the voice containers</code></pre>
+
+  <h2><span class="num">05</span>Why keep this stack at all</h2>
+  <p>Because if you need uncensored models, this is the best-engineered option I've found for a Spark — and it's not slow: heretic hits <strong>123.6 tok/s on math</strong> single-stream (his measurement; category matters a lot with speculation), ornith matches its published ~93 average on my box, and the whole family holds 262k contexts. The unsloth stack wins on capacity and raw aggregate; the AEON stack is what exists when censored won't do — and after this week's image bump, its 27B is 22% faster than it was on Monday.</p>
+</div>
+
+</section>
+
+<!-- ================= SHARED SECTIONS ================= -->
+<div class="wrap">
+  <h2><span class="num">A</span>Whose shoulders</h2>
+  <p>Nearly everything above started as someone else's work. Two of the biggest wins were just reading what they'd published, carefully.</p>
+</div>
+<div class="bleed">
+  <div class="credits">
+    <div class="credit"><div class="who"><a href="https://github.com/r0b0tlab/qwen36-35b-a3b-nvfp4-sm121-vllm">r0b0tlab</a></div><div class="what">Published a working sm_121 config listing "B12X routed experts · MTP K=2 · <strong>Triton draft MoE</strong>." That phrase is the entire b12x+MTP fix. He had it before I did.</div></div>
+    <div class="credit"><div class="who"><a href="https://unsloth.ai/docs/basics/nvfp4">unsloth</a></div><div class="what">The NVFP4 checkpoints, <code>CUTE_DSL_ARCH=sm_121a</code>, the b12x availability probe, and the accuracy figures. Their Spark advice didn't pan out <em>on my workload</em> — their checkpoints absolutely did.</div></div>
+    <div class="credit"><div class="who"><a href="https://github.com/AEON-7">AEON-7</a></div><div class="what">The sm_121a images, the DFlash drafters (one of which I grafted onto unsloth's 27B for +35%), the uncensored checkpoints, and properly Spark-measured model cards — the only vendor numbers here that compare directly.</div></div>
+    <div class="credit"><div class="who"><a href="https://walterra.dev/blog/2026-07-15-vllm-ultimate-gx10-aeon-snake">walterra.dev</a></div><div class="what">The persistent <code>/root/.cache/vllm</code> mount (cold 13–16 min → warm ~2 min) and the fork-starvation warning at high utilization — which I then reproduced the hard way.</div></div>
+    <div class="credit"><div class="who"><a href="https://github.com/eugr/spark-vllm-docker">eugr</a></div><div class="what">The nightly vLLM-main image the unsloth stack runs on, and the honest README line — "NVFP4 performance on Spark not fully optimized in vLLM (any build)" — my data independently confirms it.</div></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <h2><span class="num">B</span>How to read my numbers (and everyone else's)</h2>
+  <p>Three things you need to know before comparing any figure on this page to a figure from anywhere else.</p>
+  <h3>1. Benchmarks measure the measuring tool, too</h3>
+  <p>My benchmark asks the server to <em>stream</em> its answer word-by-word, the way a chat app does. Most benchmarks ask for the whole answer in one block. Streaming has overhead — and I measured exactly how much: the same model, on the same machine, on the same day, scores <strong>68.6–71.9 tok/s</strong> with my streaming tool and <strong>92.7</strong> with my older non-streaming one. Nothing about the model changed; only the measuring method did. That's a 25% gap from methodology alone. So: numbers from the <em>same</em> tool can be compared; numbers from <em>different</em> tools can't — including mine against unsloth's or AEON's. Where this page puts them side by side anyway, it says "direction, not decimals" and means it.</p>
+  <h3>2. I published my mistakes on purpose</h3>
+  <p>In four days I reached two confident, wrong conclusions and nearly a third:</p>
+  <p><strong>Wrong #1:</strong> "The new AEON image is 20% slower." It wasn't — I had switched benchmarking tools between the measurements (see above). Running <em>both</em> images through the <em>same</em> tool showed them identical. <strong>Wrong #2:</strong> "The b12x kernels can't work on this GPU." vLLM's own check said they were available the whole time; the actual blocker was one unquantized layer needing its own setting — the fix in section 01. <strong>Near-miss #3:</strong> I almost judged the new AEON image on a single model — the one model (of three) that happened to show zero difference. Testing the rest revealed +22%.</p>
+  <h3>3. The habits that caught all three</h3>
+  <p>Change one thing at a time. Re-measure the old setup with the new tool before declaring anything slower. After every server start, send one real chat message — the health check is a different program from the engine and will happily say "ready" over a corpse. And when two runs disagree with each other by more than the difference you're trying to detect, run a third instead of publishing. None of this is clever. All of it is the reason this page isn't three falsehoods with confident formatting.</p>
+</div>
+
+<footer>
+  <div class="wrap">
+    <p>Measured on one DGX Spark — GB10 (sm_121), 121 GiB unified LPDDR5X, ~273 GB/s, driver 595.71.05 — over four days, using <code>eugr/spark-vllm</code> (vLLM main, FlashInfer 0.6.15) and <code>ghcr.io/aeon-7/aeon-vllm-ultimate</code> 0.24 / 0.25.0.</p>
+    <p>Scripts, raw logs, failure catalog: <a href="https://github.com/hiceron/spark-nvfp4-lab"><strong>github.com/hiceron/spark-nvfp4-lab</strong></a> · follow the follow-ups: <a href="https://x.com/Hiceron2">@Hiceron2</a>. Numbers are facts — take them, and say where they came from.</p>
+  </div>
+</footer>
+</main>
+
+<script>
+(function(){
+  var tabs = [document.getElementById('tab-u'), document.getElementById('tab-a')];
+  var panels = {'tab-u': document.getElementById('panel-u'), 'tab-a': document.getElementById('panel-a')};
+  function select(id){
+    tabs.forEach(function(t){
+      var on = t.id === id;
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+      panels[t.id].hidden = !on;
+    });
+  }
+  tabs.forEach(function(t){
+    t.addEventListener('click', function(){ select(t.id); });
+    t.addEventListener('keydown', function(e){
+      if(e.key === 'ArrowRight' || e.key === 'ArrowLeft'){
+        var other = tabs[(tabs.indexOf(t)+1)%2];
+        other.focus(); select(other.id); e.preventDefault();
+      }
+    });
+  });
+})();
+</script>
+
+<script>
+(function(){
+  var root = document.documentElement;
+  var saved = null;
+  try { saved = localStorage.getItem('theme'); } catch(e){}
+  root.setAttribute('data-theme', saved === 'light' ? 'light' : 'dark');
+  document.getElementById('themebtn').addEventListener('click', function(){
+    var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('theme', next); } catch(e){}
+  });
+})();
+</script>
 </body>
 </html>
