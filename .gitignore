@@ -8,3 +8,8 @@ __pycache__/
 *.log
 .idea/
 .vscode/
+
+# Private posting drafts — never publish
+SOCIAL.md
+*.SOCIAL.md
+
