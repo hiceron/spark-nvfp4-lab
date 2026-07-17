@@ -281,7 +281,51 @@ vllm serve unsloth/Qwen3.6-35B-A3B-NVFP4-Fast \
       <g><title>27B dense at 32k: 1,085 tok/s (TTFT 30 s)</title><rect class="bar" x="550" y="185" width="86" height="25" rx="4" fill="var(--blue)"/><text x="593" y="175" font-family="ui-monospace,monospace" font-size="13" font-weight="600" fill="var(--ink)" text-anchor="middle">1,085</text></g>
       <g font-family="ui-monospace,monospace" font-size="12" fill="var(--ink-2)" text-anchor="middle"><text x="238" y="232">8k prompt</text><text x="548" y="232">32k prompt</text></g>
     </svg>
-    <figcaption>Single request, prompt caching defeated. A 32k prompt: <strong>6.8 s</strong> to first token on the MoE, <strong>30 s</strong> on the dense 27B — every message, before a single word appears. My own docs had "~7,000 tok/s" written down as <em>the</em> prefill number; it was an 8k-only figure.</figcaption>
+    <figcaption>Single request, prompt caching defeated. My own docs had "~7,000 tok/s" written down as <em>the</em> prefill number; it was an 8k-only figure.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="legend">
+      <span><span class="swatch" style="background:var(--amber)"></span>35B-A3B (MoE)</span>
+      <span><span class="swatch" style="background:var(--blue)"></span>27B dense</span>
+    </div>
+    <svg viewBox="0 0 720 330" role="img" aria-label="Time to first token at three prompt sizes. Short prompt: 0.10 seconds for the 35B, 0.3 for the 27B. 8k prompt: 1.2 versus 5.1 seconds. 32k prompt: 6.8 versus 30 seconds.">
+      <g font-family="ui-monospace,monospace" font-size="12" fill="var(--muted)">
+        <text x="20" y="46">short</text>
+        <text x="20" y="128">8k</text>
+        <text x="20" y="216">32k</text>
+      </g>
+      <line x1="150" y1="10" x2="150" y2="270" stroke="var(--rule)" stroke-width="1"/>
+
+      <g><title>35B-A3B, short prompt: 0.10 s</title>
+        <rect class="bar" x="150" y="26" width="3" height="20" fill="var(--amber)"/>
+        <text x="162" y="41" font-family="ui-monospace,monospace" font-size="13" font-weight="600" fill="var(--ink)">0.10 s</text>
+        <text x="235" y="41" font-family="ui-monospace,monospace" font-size="11.5" fill="var(--muted)">← the bar is 3px wide. That's the point.</text></g>
+      <g><title>27B dense, short prompt: ~0.3 s</title>
+        <rect class="bar" x="150" y="52" width="6" height="20" fill="var(--blue)"/>
+        <text x="165" y="67" font-family="ui-monospace,monospace" font-size="13" fill="var(--ink-2)">0.3 s</text></g>
+
+      <g><title>35B-A3B, 8k prompt: 1.2 s</title>
+        <rect class="bar" x="150" y="108" width="22" height="20" rx="3" fill="var(--amber)"/>
+        <text x="181" y="123" font-family="ui-monospace,monospace" font-size="13" font-weight="600" fill="var(--ink)">1.2 s</text></g>
+      <g><title>27B dense, 8k prompt: 5.1 s</title>
+        <rect class="bar" x="150" y="134" width="90" height="20" rx="3" fill="var(--blue)"/>
+        <text x="249" y="149" font-family="ui-monospace,monospace" font-size="13" fill="var(--ink-2)">5.1 s</text></g>
+
+      <g><title>35B-A3B, 32k prompt: 6.8 s</title>
+        <rect class="bar" x="150" y="196" width="120" height="20" rx="3" fill="var(--amber)"/>
+        <text x="279" y="211" font-family="ui-monospace,monospace" font-size="13" font-weight="600" fill="var(--ink)">6.8 s</text></g>
+      <g><title>27B dense, 32k prompt: 30.0 s</title>
+        <rect class="bar" x="150" y="222" width="528" height="20" rx="3" fill="var(--blue)"/>
+        <text x="610" y="237" font-family="ui-monospace,monospace" font-size="13" font-weight="600" fill="#fff">30.0 s</text></g>
+
+      <g font-family="ui-monospace,monospace" font-size="11" fill="var(--muted)" text-anchor="middle">
+        <line x1="150" y1="270" x2="700" y2="270" stroke="var(--rule)" stroke-width="1"/>
+        <text x="150" y="288">0</text><text x="326" y="288">10 s</text><text x="502" y="288">20 s</text><text x="678" y="288">30 s</text>
+      </g>
+      <text x="150" y="316" font-family="ui-monospace,monospace" font-size="11" fill="var(--muted)" text-anchor="start">time to first token (TTFT) · one linear scale, deliberately · lower is better</text>
+    </svg>
+    <figcaption>TTFT is the number you feel — and it spans <strong>300×</strong> on the same box. A short question answers in <strong>0.10 s</strong> on the 35B; the same model needs 6.8 s at 32k, and the dense 27B needs <strong>30 s</strong> — paid on every message, before a single word appears. No setting moves it; only prefill throughput and prompt caching do. (In real agent use with vLLM's prefix cache at ~86% hits, measured mean TTFT was 2.2 s — the cache is why agent workloads survive.)</figcaption>
   </figure>
 </div>
 
@@ -362,6 +406,7 @@ vllm serve unsloth/Qwen3.6-35B-A3B-NVFP4-Fast \
         <tbody>
           <tr><td>Prefill 8k</td><td>4,578</td><td>4,761</td></tr>
           <tr><td>Prefill 32k</td><td>4,207</td><td>4,286</td></tr>
+          <tr><td>TTFT @32k</td><td>7.8 s</td><td>7.6 s</td></tr>
           <tr><td>Decode c=1</td><td>66.3</td><td>63.4</td></tr>
           <tr><td>KV @262k</td><td>2.68×</td><td>2.69×</td></tr>
           <tr><td>Verdict</td><td colspan="2"><strong>dead heat</strong> (runs varied ±15%)</td></tr>
@@ -375,6 +420,7 @@ vllm serve unsloth/Qwen3.6-35B-A3B-NVFP4-Fast \
         <tbody>
           <tr><td>Prefill 8k</td><td>5,116</td><td>5,186</td></tr>
           <tr><td>Prefill 32k</td><td>4,418</td><td class="win">4,585</td></tr>
+          <tr><td>TTFT @32k</td><td>7.4 s</td><td class="win">7.1 s</td></tr>
           <tr><td>Decode c=1</td><td>70.8</td><td class="win">76.8</td></tr>
           <tr><td>KV @262k</td><td>2.69×</td><td class="win">2.88×</td></tr>
           <tr><td>Verdict</td><td colspan="2" class="win"><strong>+8.5% decode, +7% KV</strong></td></tr>
@@ -388,6 +434,7 @@ vllm serve unsloth/Qwen3.6-35B-A3B-NVFP4-Fast \
         <tbody>
           <tr><td>Prefill 8k</td><td>1,757</td><td class="win">1,885</td></tr>
           <tr><td>Prefill 32k</td><td>1,322</td><td class="win">1,456</td></tr>
+          <tr><td>TTFT @32k</td><td>24.8 s</td><td class="win">22.5 s</td></tr>
           <tr><td>Decode c=1</td><td>25.0</td><td class="win">30.4</td></tr>
           <tr><td>DFlash accept</td><td>27.8%</td><td class="win">31.3%</td></tr>
           <tr><td>Verdict</td><td colspan="2" class="win"><strong>+22% decode</strong></td></tr>
